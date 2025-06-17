@@ -12,38 +12,6 @@
   ],
   "routes": [
     {
-      "src": "/api/articles/(.*)",
-      "dest": "/api/articles/[id].ts"
-    },
-    {
-      "src": "/api/banner-highlights/(.*)",
-      "dest": "/api/banner-highlights/[id].ts"
-    },
-    {
-      "src": "/api/developers/(.*)",
-      "dest": "/api/developers/[id].ts"
-    },
-    {
-      "src": "/api/developments/(.*)",
-      "dest": "/api/developments/[id].ts"
-    },
-    {
-      "src": "/api/enquiries/(.*)",
-      "dest": "/api/enquiries/[id].ts"
-    },
-    {
-      "src": "/api/neighborhoods/(.*)",
-      "dest": "/api/neighborhoods/[id].ts"
-    },
-    {
-      "src": "/api/sitemap/(.*)",
-      "dest": "/api/sitemap/[id].ts"
-    },
-    {
-      "src": "/api/properties/(.*)",
-      "dest": "/api/properties/[id].ts"
-    },
-    {
       "src": "/api/(.*)",
       "dest": "/api/$1"
     },
