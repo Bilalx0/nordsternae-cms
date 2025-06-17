@@ -1,0 +1,24 @@
+{
+
+  "include": ["client/src/**/*", "shared/**/*", "server/**/*", "api/**/*"],
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
+    "noEmit": true,
+    "module": "Node16",
+    "strict": true,
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "jsx": "preserve",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "moduleResolution": "node16",
+    "baseUrl": "./client", // Changed from "."
+    "types": ["node", "vite/client"],
+    "paths": {
+      "@/*": ["src/*"], // Changed from "./client/src/*"
+      "@shared/*": ["../shared/*"], // Adjusted for new baseUrl
+      "@server/*": ["../server/*"] // Adjusted for new baseUrl
+    }
+  }
+}
