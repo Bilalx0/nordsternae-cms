@@ -15,54 +15,62 @@
       }
     }
   ],
- "routes": [
+  "rewrites": [
     {
-      "src": "/api/properties(/(.*))?",
-      "dest": "/api/properties.ts"
+      "source": "/api/properties(/(.*))?",
+      "destination": "/api/properties.ts"
     },
     {
-      "src": "/api/sitemap(/(.*))?",
-      "dest": "/api/sitemap.ts"
+      "source": "/api/sitemap(/(.*))?",
+      "destination": "/api/sitemap.ts"
     },
     {
-      "src": "/api/neighborhoods(/(.*))?",
-      "dest": "/api/neighborhoods.ts"
+      "source": "/api/neighborhoods(/(.*))?",
+      "destination": "/api/neighborhoods.ts"
     },
     {
-      "src": "/api/enquiries(/(.*))?",
-      "dest": "/api/enquiries.ts"
+      "source": "/api/enquiries(/(.*))?",
+      "destination": "/api/enquiries.ts"
     },
     {
-      "src": "/api/developments(/(.*))?",
-      "dest": "/api/developments.ts"
+      "source": "/api/developments(/(.*))?",
+      "destination": "/api/developments.ts"
     },
     {
-      "src": "/api/developers(/(.*))?",
-      "dest": "/api/developers.ts"
+      "source": "/api/developers(/(.*))?",
+      "destination": "/api/developers.ts"
     },
     {
-      "src": "/api/banner-highlights(/(.*))?",
-      "dest": "/api/banner-highlights.ts"
+      "source": "/api/banner-highlights(/(.*))?",
+      "destination": "/api/banner-highlights.ts"
     },
     {
-      "src": "/api/agents(/(.*))?",
-      "dest": "/api/agents.ts"
+      "source": "/api/agents(/(.*))?",
+      "destination": "/api/agents.ts"
     },
     {
-      "src": "/api/articles(/(.*))?",
-      "dest": "/api/articles.ts"
+      "source": "/api/articles(/(.*))?",
+      "destination": "/api/articles.ts"
     },
     {
-      "src": "/api/import-properties(/(.*))?",
-      "dest": "/api/import-properties/index.ts"
+      "source": "/api/import-properties(/(.*))?",
+      "destination": "/api/import-properties.ts"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/client/dist/assets/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
-      "src": "/(.*)",
-      "dest": "/client/dist/index.html"
+      "source": "/assets/(.*)",
+      "destination": "/client/dist/assets/$1"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/client/dist/favicon.ico"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/client/dist/index.html"
     }
   ]
 }
