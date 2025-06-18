@@ -75,6 +75,15 @@
     {
       "source": "/properties",
       "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties/:id",
+      "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties/new",
+      "destination": "/client/dist/index.html"
     }
+   
   ]
 }
