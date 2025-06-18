@@ -71,6 +71,10 @@
     {
       "source": "/(.*)",
       "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties",
+      "destination": "/client/dist/index.html"
     }
   ]
 }
