@@ -35,32 +35,24 @@ export default defineConfig({
   root: path.resolve(import.meta.dirname, "client"),
   // Build configuration for production.
   build: {
-    // This specifies the output directory for the production build.
-    // It's relative to the project root (where vite.config.ts is).
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    // === IMPORTANT CHANGE HERE ===
+    // This now tells Vite to output the build directly into 'dist'
+    // relative to its 'root' (which is 'client/').
+    // So, the output will be in 'your-project-root/client/dist'.
+    outDir: "dist",
     // Ensures the output directory is cleaned before a new build.
     emptyOutDir: true,
   },
-  // Server configuration for development. This is crucial for `vercel dev`.
+  // Server configuration for development. Crucial for `vercel dev`.
   server: {
     // Explicitly set the port Vite should use for its *internal* dev server.
     // Vercel dev will then proxy to this port.
     port: 5173,
     // Vite's Host Module Replacement (HMR) setup.
-    // When running behind a proxy like `vercel dev`, HMR might try to connect
-    // to the wrong host/port, causing connection issues and 404s for HMR-related files.
     hmr: {
-      // Setting 'overlay' to false can sometimes help prevent issues
-      // with the HMR client script itself failing to load if there's a proxy misconfiguration.
       overlay: false,
     },
-    // Specify the host for the dev server. '0.0.0.0' makes it accessible externally,
-    // which can sometimes help with proxying if 'localhost' is too restrictive.
+    // Specify the host for the dev server. '0.0.0.0' makes it accessible externally.
     host: '0.0.0.0',
-    // If you were running API routes on a separate server, you'd configure a proxy here.
-    // However, with Vercel serverless functions, `vercel dev` handles the API part.
-    // proxy: {
-    //   '/api': 'http://localhost:XXXX' // Example if you had a separate API dev server
-    // }
   }
 });

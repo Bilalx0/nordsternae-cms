@@ -8,10 +8,10 @@
       "use": "@vercel/node"
     },
     {
-      "src": "client/index.html",
+      "src": "client",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "dist/public"
+        "distDir": "dist"
       }
     }
   ],
@@ -56,10 +56,17 @@
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
- 
+    {
+      "source": "/assets/(.*)",
+      "destination": "/client/dist/assets/$1"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/client/dist/favicon.ico"
+    },
     {
       "source": "/(.*)",
-      "destination": "/dist/public/index.html"
+      "destination": "/client/dist/index.html"
     }
   ]
 }
