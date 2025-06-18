@@ -1,22 +1,22 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DashLayout } from "@/components/layout/dash-layout.jsx";
-import { DataTable } from "@/components/ui/data-table.jsx";
-import { Button } from "@/components/ui/button.jsx";
-import { Badge } from "@/components/ui/badge.jsx";
-import { apiRequest, queryClient } from "@/lib/queryClient.js";
-import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw } from "lucide-react";
+import { DashLayout } from "@/components/layout/dash-layout";
+import { DataTable } from "@/components/ui/data-table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
-import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils.js";
-import { CSVUpload } from "@/components/ui/csv-upload.jsx";
+import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
+import { CSVUpload } from "@/components/ui/csv-upload";
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
   DialogDescription 
-} from "@/components/ui/dialog.jsx";
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,24 +26,164 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog.jsx";
-import { useToast } from "@/hooks/use-toast.js";
+} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
+
+// Define types for better TypeScript support
+interface Property {
+  id: number;
+  reference: string;
+  title: string;
+  propertyType: string;
+  community: string;
+  region: string;
+  price: number;
+  currency: string;
+  propertyStatus: string;
+  agent?: {
+    id: string;
+    name: string;
+  }[] | {
+    id: string;
+    name: string;
+  };
+}
+
+interface ImportResult {
+  reference: string;
+  action: 'created' | 'updated';
+  id: number;
+}
+
+interface ImportResponse {
+  message: string;
+  total: number;
+  processed: number;
+  errors: number;
+  results: ImportResult[];
+  errorDetails: any[];
+}
 
 export default function PropertiesPage() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState<boolean>(false);
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
-  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
+  const [nextImportTime, setNextImportTime] = useState<Date | null>(null);
+  const [timeUntilNextImport, setTimeUntilNextImport] = useState<string>("");
 
   // Fetch properties
-  const { data: properties = [], isLoading, refetch } = useQuery({
+  const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
 
+  // Auto-import mutation
+  const autoImportMutation = useMutation<ImportResponse, Error>({
+    mutationFn: async (): Promise<ImportResponse> => {
+      const result = await apiRequest("GET", "/api/import-properties");
+      return result as ImportResponse;
+    },
+    onSuccess: (result: ImportResponse) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+      setLastImportTime(new Date());
+      
+      const { processed = 0, errors = 0, results = [] } = result;
+      const created = results.filter((r: ImportResult) => r.action === 'created').length;
+      const updated = results.filter((r: ImportResult) => r.action === 'updated').length;
+      
+      toast({
+        title: "Auto-import completed",
+        description: `${created} new properties created, ${updated} updated. ${errors > 0 ? `${errors} errors occurred.` : ''}`,
+      });
+    },
+    onError: (error: Error) => {
+      console.error("Auto-import failed:", error);
+      toast({
+        title: "Auto-import failed",
+        description: "Failed to import properties automatically. Please try manual refresh.",
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setIsImporting(false);
+    },
+  });
+
+  // Manual import function
+  const handleManualImport = async (): Promise<void> => {
+    setIsImporting(true);
+    autoImportMutation.mutate();
+  };
+
+  // Set up auto-import timer
+  useEffect(() => {
+    const IMPORT_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+    
+    // Function to perform auto-import
+    const performAutoImport = (): void => {
+      console.log("Performing auto-import...");
+      setIsImporting(true);
+      autoImportMutation.mutate();
+      
+      // Set next import time
+      const nextTime = new Date(Date.now() + IMPORT_INTERVAL);
+      setNextImportTime(nextTime);
+    };
+
+    // Set initial next import time
+    const initialNextTime = new Date(Date.now() + IMPORT_INTERVAL);
+    setNextImportTime(initialNextTime);
+
+    // Set up interval for auto-import
+    const importInterval = setInterval(performAutoImport, IMPORT_INTERVAL);
+
+    // Perform initial import if no last import time
+    if (!lastImportTime) {
+      const initialTimeout = setTimeout(() => {
+        console.log("Performing initial auto-import...");
+        performAutoImport();
+      }, 5000); // Wait 5 seconds after component mount
+
+      return () => {
+        clearInterval(importInterval);
+        clearTimeout(initialTimeout);
+      };
+    }
+
+    return () => {
+      clearInterval(importInterval);
+    };
+  }, [lastImportTime, autoImportMutation]);
+
+  // Update countdown timer
+  useEffect(() => {
+    const updateCountdown = (): void => {
+      if (nextImportTime) {
+        const now = new Date();
+        const diff = nextImportTime.getTime() - now.getTime();
+        
+        if (diff > 0) {
+          const minutes = Math.floor(diff / (1000 * 60));
+          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+          setTimeUntilNextImport(`${minutes}m ${seconds}s`);
+        } else {
+          setTimeUntilNextImport("Importing...");
+        }
+      }
+    };
+
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+    
+    return () => clearInterval(countdownInterval);
+  }, [nextImportTime]);
+
   // Handle refresh
-  const handleRefresh = async () => {
+  const handleRefresh = async (): Promise<void> => {
     setIsRefreshing(true);
     await refetch();
     setIsRefreshing(false);
@@ -54,50 +194,47 @@ export default function PropertiesPage() {
   };
 
   // Delete property mutation
-  const deletePropertyMutation = useMutation({
-  mutationFn: async (id: number) => {
-    const result = await apiRequest("DELETE", `/api/properties/${id}`);
-    return result; // Could be null for 204
-  },
-  onSuccess: (result) => {
-    queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
-    toast({
-      title: "Property deleted",
-      description: "The property has been successfully deleted.",
-    });
-    setDeletePropertyId(null);
-  },
-  onError: (error) => {
-    toast({
-      title: "Error",
-      description: "Failed to delete property. Please try again.",
-      variant: "destructive",
-    });
-    console.error("Failed to delete property:", error);
-  },
-});
+  const deletePropertyMutation = useMutation<any, Error, number>({
+    mutationFn: async (id: number) => {
+      const result = await apiRequest("DELETE", `/api/properties/${id}`);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+      toast({
+        title: "Property deleted",
+        description: "The property has been successfully deleted.",
+      });
+      setDeletePropertyId(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: "Failed to delete property. Please try again.",
+        variant: "destructive",
+      });
+      console.error("Failed to delete property:", error);
+    },
+  });
 
-  // Delete all properties mutation (client-side batch delete)
-  const deleteAllPropertiesMutation = useMutation({
-    mutationFn: async () => {
-      const propertyIds = (properties as Array<{ id: number }>).map(property => property.id);
+  // Delete all properties mutation
+  const deleteAllPropertiesMutation = useMutation<any[], Error>({
+    mutationFn: async (): Promise<any[]> => {
+      const propertyIds = (properties as Property[]).map(property => property.id);
       const deletePromises = propertyIds.map(id => 
         apiRequest("DELETE", `/api/properties/${id}`)
       );
       
-      // Execute all delete requests
       const results = await Promise.allSettled(deletePromises);
-      
-      // Check for any failures
       const failures = results.filter(result => result.status === 'rejected');
       
       if (failures.length > 0) {
         throw new Error(`Failed to delete ${failures.length} out of ${propertyIds.length} properties`);
       }
       
-      return results;
+      return results.map(result => result.status === 'fulfilled' ? result.value : null);
     },
-    onSuccess: (results) => {
+    onSuccess: (results: any[]) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       toast({
         title: "All properties deleted",
@@ -105,8 +242,8 @@ export default function PropertiesPage() {
       });
       setShowDeleteAllDialog(false);
     },
-    onError: (error) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/properties'] }); // Refresh to show current state
+    onError: (error: Error) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       toast({
         title: "Error",
         description: error.message || "Some properties could not be deleted. Please try again.",
@@ -116,25 +253,25 @@ export default function PropertiesPage() {
     },
   });
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: number): void => {
     setDeletePropertyId(id);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = (): void => {
     if (deletePropertyId !== null) {
       deletePropertyMutation.mutate(deletePropertyId);
     }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = (): void => {
     setShowDeleteAllDialog(true);
   };
 
-  const confirmDeleteAll = () => {
+  const confirmDeleteAll = (): void => {
     deleteAllPropertiesMutation.mutate();
   };
 
-  const handleExportCSV = () => {
+  const handleExportCSV = (): void => {
     const csv = objectsToCSV(properties as Record<string, any>[]);
     downloadCSV(csv, "properties.csv");
     toast({
@@ -143,8 +280,7 @@ export default function PropertiesPage() {
     });
   };
 
-  const handleImportCSV = (data: any[]) => {
-    // In a real app, this would call a bulk import API endpoint
+  const handleImportCSV = (data: any[]): void => {
     toast({
       title: "Import successful",
       description: `${data.length} properties have been imported.`,
@@ -153,7 +289,7 @@ export default function PropertiesPage() {
     queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
   };
 
-  const propertyColumns: ColumnDef<any>[] = [
+  const propertyColumns: ColumnDef<Property>[] = [
     {
       id: "reference",
       header: "Reference",
@@ -203,14 +339,14 @@ export default function PropertiesPage() {
       accessorKey: "propertyStatus",
       cell: ({ row }) => {
         const status = row.original.propertyStatus;
-        let badgeVariant = "outline";
+        let badgeVariant: "default" | "secondary" | "destructive" | "outline" = "outline";
         
-        if (status === "Off Plan") badgeVariant = "warning";
-        else if (status === "Ready") badgeVariant = "success";
+        if (status === "Off Plan") badgeVariant = "secondary";
+        else if (status === "Ready") badgeVariant = "default";
         else if (status === "Sold") badgeVariant = "destructive";
         
         return (
-          <Badge variant={badgeVariant as any}>
+          <Badge variant={badgeVariant}>
             {status}
           </Badge>
         );
@@ -267,6 +403,34 @@ export default function PropertiesPage() {
       title="Properties Management"
       description="Manage all property listings across your platform"
     >
+      {/* Auto-import status bar */}
+      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-600" />
+            <span className="text-sm font-medium text-blue-800">Auto-Import Status</span>
+          </div>
+          <div className="flex items-center gap-4">
+            {lastImportTime && (
+              <span className="text-xs text-blue-600">
+                Last import: {lastImportTime.toLocaleTimeString()}
+              </span>
+            )}
+            {nextImportTime && (
+              <span className="text-xs text-blue-600">
+                Next import in: {timeUntilNextImport}
+              </span>
+            )}
+            {isImporting && (
+              <div className="flex items-center gap-1 text-blue-600">
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                <span className="text-xs">Importing...</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div className="mt-4 md:mt-0 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
           <Button 
@@ -275,6 +439,15 @@ export default function PropertiesPage() {
           >
             <Plus className="h-4 w-4" />
             Add Property
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={handleManualImport}
+            className="flex items-center gap-2"
+            disabled={isImporting}
+          >
+            <Download className={`h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
+            {isImporting ? "Importing..." : "Import Now"}
           </Button>
           <Button 
             variant="outline" 
@@ -315,7 +488,7 @@ export default function PropertiesPage() {
 
       <DataTable
         columns={propertyColumns}
-        data={properties as any[]}
+        data={properties}
         filterableColumns={filterableColumns}
         searchableColumns={[
           {
@@ -327,8 +500,8 @@ export default function PropertiesPage() {
             title: "reference"
           }
         ]}
-        deleteRow={(row) => handleDelete(row.id)}
-        editRow={(row) => setLocation(`/properties/${row.id}`)}
+        deleteRow={(row: Property) => handleDelete(row.id)}
+        editRow={(row: Property) => setLocation(`/properties/${row.id}`)}
       />
 
       {/* Import CSV Dialog */}
@@ -342,7 +515,7 @@ export default function PropertiesPage() {
           </DialogHeader>
           <CSVUpload
             onUpload={handleImportCSV}
-            onError={(message) => {
+            onError={(message: string) => {
               toast({
                 title: "Import Error",
                 description: message,
@@ -378,7 +551,7 @@ export default function PropertiesPage() {
               Delete All Properties?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>ALL {Array.isArray(properties) ? properties.length : 0} properties</strong> from your database.
+              This will permanently delete <strong>ALL {properties.length} properties</strong> from your database.
               This action cannot be undone and will remove all property data, including images, descriptions, and associated records.
               <br /><br />
               Are you absolutely sure you want to proceed?
