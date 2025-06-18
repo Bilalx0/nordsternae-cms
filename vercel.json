@@ -8,7 +8,7 @@
       "use": "@vercel/node"
     },
     {
-      "src": "client",
+      "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
         "distDir": "dist"
@@ -58,15 +58,15 @@
     },
     {
       "source": "/assets/(.*)",
-      "destination": "/client/dist/assets/$1"
+      "destination": "/dist/assets/$1"
     },
     {
       "source": "/favicon.ico",
-      "destination": "/client/dist/favicon.ico"
+      "destination": "/dist/favicon.ico"
     },
     {
       "source": "/(.*)",
-      "destination": "/client/dist/index.html"
+      "destination": "/dist/index.html"
     }
   ]
 }
