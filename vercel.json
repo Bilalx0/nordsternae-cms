@@ -71,10 +71,6 @@
     {
       "source": "/(.*)",
       "destination": "/client/dist/index.html"
-    },
-    { 
-      "source": "/(.*)", 
-      "destination": "/" 
     }
   ]
 }
