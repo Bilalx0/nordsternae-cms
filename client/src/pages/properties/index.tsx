@@ -76,8 +76,6 @@ export default function PropertiesPage() {
   const [nextImportTime, setNextImportTime] = useState<Date | null>(null);
   const [timeUntilNextImport, setTimeUntilNextImport] = useState<string>("");
 
-  const IMPORT_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
-
   // Fetch properties
   const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
@@ -91,12 +89,7 @@ export default function PropertiesPage() {
     },
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
-      const now = new Date();
-      setLastImportTime(now);
-      
-      // Set the next import time after successful import
-      const nextTime = new Date(now.getTime() + IMPORT_INTERVAL);
-      setNextImportTime(nextTime);
+      setLastImportTime(new Date());
       
       const { processed = 0, errors = 0, results = [] } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
@@ -114,11 +107,6 @@ export default function PropertiesPage() {
         description: "Failed to import properties automatically. Please try manual refresh.",
         variant: "destructive",
       });
-      
-      // Still set next import time even if failed, to retry
-      const now = new Date();
-      const nextTime = new Date(now.getTime() + IMPORT_INTERVAL);
-      setNextImportTime(nextTime);
     },
     onSettled: () => {
       setIsImporting(false);
@@ -133,48 +121,48 @@ export default function PropertiesPage() {
 
   // Set up auto-import timer
   useEffect(() => {
-    let importInterval: NodeJS.Timeout;
-    let initialTimeout: NodeJS.Timeout;
+    const IMPORT_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
     
     // Function to perform auto-import
     const performAutoImport = (): void => {
       console.log("Performing auto-import...");
       setIsImporting(true);
       autoImportMutation.mutate();
+      
+      // Set next import time
+      const nextTime = new Date(Date.now() + IMPORT_INTERVAL);
+      setNextImportTime(nextTime);
     };
 
-    // Set initial next import time if not set
-    if (!nextImportTime) {
-      const initialNextTime = new Date(Date.now() + IMPORT_INTERVAL);
-      setNextImportTime(initialNextTime);
-    }
+    // Set initial next import time
+    const initialNextTime = new Date(Date.now() + IMPORT_INTERVAL);
+    setNextImportTime(initialNextTime);
 
     // Set up interval for auto-import
-    importInterval = setInterval(() => {
-      const now = new Date();
-      if (nextImportTime && now >= nextImportTime) {
-        performAutoImport();
-      }
-    }, 1000); // Check every second
+    const importInterval = setInterval(performAutoImport, IMPORT_INTERVAL);
 
     // Perform initial import if no last import time
     if (!lastImportTime) {
-      initialTimeout = setTimeout(() => {
+      const initialTimeout = setTimeout(() => {
         console.log("Performing initial auto-import...");
         performAutoImport();
       }, 5000); // Wait 5 seconds after component mount
+
+      return () => {
+        clearInterval(importInterval);
+        clearTimeout(initialTimeout);
+      };
     }
 
     return () => {
-      if (importInterval) clearInterval(importInterval);
-      if (initialTimeout) clearTimeout(initialTimeout);
+      clearInterval(importInterval);
     };
-  }, [nextImportTime, lastImportTime, autoImportMutation]);
+  }, [lastImportTime, autoImportMutation]);
 
   // Update countdown timer
   useEffect(() => {
     const updateCountdown = (): void => {
-      if (nextImportTime && !isImporting) {
+      if (nextImportTime) {
         const now = new Date();
         const diff = nextImportTime.getTime() - now.getTime();
         
@@ -183,12 +171,8 @@ export default function PropertiesPage() {
           const seconds = Math.floor((diff % (1000 * 60)) / 1000);
           setTimeUntilNextImport(`${minutes}m ${seconds}s`);
         } else {
-          setTimeUntilNextImport("Ready to import...");
+          setTimeUntilNextImport("Importing...");
         }
-      } else if (isImporting) {
-        setTimeUntilNextImport("Importing...");
-      } else {
-        setTimeUntilNextImport("Initializing...");
       }
     };
 
@@ -196,7 +180,7 @@ export default function PropertiesPage() {
     const countdownInterval = setInterval(updateCountdown, 1000);
     
     return () => clearInterval(countdownInterval);
-  }, [nextImportTime, isImporting]);
+  }, [nextImportTime]);
 
   // Handle refresh
   const handleRefresh = async (): Promise<void> => {
@@ -432,9 +416,11 @@ export default function PropertiesPage() {
                 Last import: {lastImportTime.toLocaleTimeString()}
               </span>
             )}
-            <span className="text-xs text-blue-600">
-              Next import in: {timeUntilNextImport}
-            </span>
+            {nextImportTime && (
+              <span className="text-xs text-blue-600">
+                Next import in: {timeUntilNextImport}
+              </span>
+            )}
             {isImporting && (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
