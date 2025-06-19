@@ -74,37 +74,53 @@ export default function PropertiesPage() {
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [nextImportTime, setNextImportTime] = useState<Date | null>(null);
-  const [timeUntilNextImport, setTimeUntilNextImport] = useState<string>("");
+  const [timeUntilNextImport, setTimeUntilNextImport] = useState<string>("15m 0s");
 
   // Fetch properties
   const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
 
-  // Auto-import mutation
+  // Auto-import mutation with enhanced error handling
   const autoImportMutation = useMutation<ImportResponse, Error>({
     mutationFn: async (): Promise<ImportResponse> => {
+      setIsImporting(true);
       const result = await apiRequest("GET", "/api/import-properties");
       return result as ImportResponse;
     },
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLastImportTime(new Date());
-      
-      const { processed = 0, errors = 0, results = [] } = result;
+      setNextImportTime(new Date(Date.now() + 15 * 60 * 1000)); // Reset to 15 minutes
+
+      const { processed = 0, errors = 0, results = [], total = 0 } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
       const updated = results.filter((r: ImportResult) => r.action === 'updated').length;
-      
-      toast({
-        title: "Auto-import completed",
-        description: `${created} new properties created, ${updated} updated. ${errors > 0 ? `${errors} errors occurred.` : ''}`,
-      });
+
+      if (total === 0) {
+        toast({
+          title: "No Data Found",
+          description: "The XML feed contains no properties.",
+          variant: "default",
+        });
+      } else if (processed === 0 && errors === 0) {
+        toast({
+          title: "No Changes Detected",
+          description: "All IDs are present; no new properties in XML.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Auto-import completed",
+          description: `${created} new properties created, ${updated} updated. ${errors > 0 ? `${errors} errors occurred.` : ''}`,
+        });
+      }
     },
     onError: (error: Error) => {
       console.error("Auto-import failed:", error);
       toast({
-        title: "Auto-import failed",
-        description: "Failed to import properties automatically. Please try manual refresh.",
+        title: "Import Failed",
+        description: `Failed to import properties: ${error.message || 'Server error. Please try again later.'}`,
         variant: "destructive",
       });
     },
@@ -122,13 +138,11 @@ export default function PropertiesPage() {
   // Set up auto-import timer
   useEffect(() => {
     const IMPORT_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
-    
-    // Function to perform auto-import
+
     const performAutoImport = (): void => {
       console.log("Performing auto-import...");
-      setIsImporting(true);
       autoImportMutation.mutate();
-      
+
       // Set next import time
       const nextTime = new Date(Date.now() + IMPORT_INTERVAL);
       setNextImportTime(nextTime);
@@ -143,44 +157,42 @@ export default function PropertiesPage() {
 
     // Perform initial import if no last import time
     if (!lastImportTime) {
-      const initialTimeout = setTimeout(() => {
-        console.log("Performing initial auto-import...");
-        performAutoImport();
-      }, 5000); // Wait 5 seconds after component mount
-
+      const initialTimeout = setTimeout(() => performAutoImport(), 5000); // Wait 5 seconds after mount
       return () => {
         clearInterval(importInterval);
         clearTimeout(initialTimeout);
       };
     }
 
-    return () => {
-      clearInterval(importInterval);
-    };
+    return () => clearInterval(importInterval);
   }, [lastImportTime, autoImportMutation]);
 
-  // Update countdown timer
+  // Update countdown timer dynamically
   useEffect(() => {
+    let countdownInterval: NodeJS.Timeout;
+
     const updateCountdown = (): void => {
       if (nextImportTime) {
         const now = new Date();
         const diff = nextImportTime.getTime() - now.getTime();
-        
-        if (diff > 0) {
+
+        if (diff <= 0) {
+          setTimeUntilNextImport("0m 0s");
+          // Trigger import when timer hits zero
+          if (!isImporting) autoImportMutation.mutate();
+        } else {
           const minutes = Math.floor(diff / (1000 * 60));
           const seconds = Math.floor((diff % (1000 * 60)) / 1000);
           setTimeUntilNextImport(`${minutes}m ${seconds}s`);
-        } else {
-          setTimeUntilNextImport("Importing...");
         }
       }
     };
 
-    updateCountdown();
-    const countdownInterval = setInterval(updateCountdown, 1000);
-    
+    updateCountdown(); // Initial call
+    countdownInterval = setInterval(updateCountdown, 1000);
+
     return () => clearInterval(countdownInterval);
-  }, [nextImportTime]);
+  }, [nextImportTime, isImporting, autoImportMutation]);
 
   // Handle refresh
   const handleRefresh = async (): Promise<void> => {
@@ -189,11 +201,11 @@ export default function PropertiesPage() {
     setIsRefreshing(false);
     toast({
       title: "Data refreshed",
-      description: "The properties list has been refreshed.",
+      description: "The properties list has been refreshed successfully.",
     });
   };
 
-  // Delete property mutation
+  // Delete property mutation with enhanced feedback
   const deletePropertyMutation = useMutation<any, Error, number>({
     mutationFn: async (id: number) => {
       const result = await apiRequest("DELETE", `/api/properties/${id}`);
@@ -202,42 +214,39 @@ export default function PropertiesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       toast({
-        title: "Property deleted",
+        title: "Property Deleted",
         description: "The property has been successfully deleted.",
       });
       setDeletePropertyId(null);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: "Failed to delete property. Please try again.",
+        title: "Deletion Failed",
+        description: `Failed to delete property: ${error.message || 'Please try again.'}`,
         variant: "destructive",
       });
       console.error("Failed to delete property:", error);
     },
   });
 
-  // Delete all properties mutation
+  // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
       const propertyIds = (properties as Property[]).map(property => property.id);
-      const deletePromises = propertyIds.map(id => 
-        apiRequest("DELETE", `/api/properties/${id}`)
-      );
-      
+      const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
-      
+
       if (failures.length > 0) {
         throw new Error(`Failed to delete ${failures.length} out of ${propertyIds.length} properties`);
       }
-      
+
       return results.map(result => result.status === 'fulfilled' ? result.value : null);
     },
     onSuccess: (results: any[]) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       toast({
-        title: "All properties deleted",
+        title: "All Properties Deleted",
         description: `Successfully deleted ${results.length} properties.`,
       });
       setShowDeleteAllDialog(false);
@@ -245,7 +254,7 @@ export default function PropertiesPage() {
     onError: (error: Error) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       toast({
-        title: "Error",
+        title: "Deletion Failed",
         description: error.message || "Some properties could not be deleted. Please try again.",
         variant: "destructive",
       });
@@ -275,14 +284,14 @@ export default function PropertiesPage() {
     const csv = objectsToCSV(properties as Record<string, any>[]);
     downloadCSV(csv, "properties.csv");
     toast({
-      title: "Export successful",
+      title: "Export Successful",
       description: "Properties have been exported to CSV.",
     });
   };
 
   const handleImportCSV = (data: any[]): void => {
     toast({
-      title: "Import successful",
+      title: "Import Successful",
       description: `${data.length} properties have been imported.`,
     });
     setIsImportDialogOpen(false);
