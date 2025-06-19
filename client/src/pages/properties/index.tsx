@@ -73,8 +73,9 @@ export default function PropertiesPage() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
-  const [nextImportTime, setNextImportTime] = useState<Date | null>(null);
-  const [timeUntilNextImport, setTimeUntilNextImport] = useState<string>("15m 0s");
+  
+  // Replace the complex timer logic with simple countdown
+  const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60); // 15 minutes in seconds
 
   // Fetch properties
   const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
@@ -91,7 +92,9 @@ export default function PropertiesPage() {
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLastImportTime(new Date());
-      setNextImportTime(new Date(Date.now() + 15 * 60 * 1000)); // Reset to 15 minutes
+      
+      // Reset timer to 15 minutes after successful import
+      setTimeRemaining(15 * 60);
 
       const { processed = 0, errors = 0, results = [], total = 0 } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
@@ -123,6 +126,8 @@ export default function PropertiesPage() {
         description: `Failed to import properties: ${error.message || 'Server error. Please try again later.'}`,
         variant: "destructive",
       });
+      // Reset timer even on error
+      setTimeRemaining(15 * 60);
     },
     onSettled: () => {
       setIsImporting(false);
@@ -131,68 +136,39 @@ export default function PropertiesPage() {
 
   // Manual import function
   const handleManualImport = async (): Promise<void> => {
-    setIsImporting(true);
-    autoImportMutation.mutate();
+    if (!isImporting) {
+      autoImportMutation.mutate();
+    }
   };
 
-  // Set up auto-import timer
+  // Simple countdown timer effect
   useEffect(() => {
-    const IMPORT_INTERVAL = 15 * 60 * 1000; // 15 minutes in milliseconds
+    let interval: NodeJS.Timeout;
 
-    const performAutoImport = (): void => {
-      console.log("Performing auto-import...");
-      autoImportMutation.mutate();
-
-      // Set next import time
-      const nextTime = new Date(Date.now() + IMPORT_INTERVAL);
-      setNextImportTime(nextTime);
-    };
-
-    // Set initial next import time
-    const initialNextTime = new Date(Date.now() + IMPORT_INTERVAL);
-    setNextImportTime(initialNextTime);
-
-    // Set up interval for auto-import
-    const importInterval = setInterval(performAutoImport, IMPORT_INTERVAL);
-
-    // Perform initial import if no last import time
-    if (!lastImportTime) {
-      const initialTimeout = setTimeout(() => performAutoImport(), 5000); // Wait 5 seconds after mount
-      return () => {
-        clearInterval(importInterval);
-        clearTimeout(initialTimeout);
-      };
+    if (!isImporting && timeRemaining > 0) {
+      interval = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            // Timer reached 0, trigger import
+            autoImportMutation.mutate();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     }
 
-    return () => clearInterval(importInterval);
-  }, [lastImportTime, autoImportMutation]);
-
-  // Update countdown timer dynamically
-  useEffect(() => {
-    let countdownInterval: NodeJS.Timeout;
-
-    const updateCountdown = (): void => {
-      if (nextImportTime) {
-        const now = new Date();
-        const diff = nextImportTime.getTime() - now.getTime();
-
-        if (diff <= 0) {
-          setTimeUntilNextImport("0m 0s");
-          // Trigger import when timer hits zero
-          if (!isImporting) autoImportMutation.mutate();
-        } else {
-          const minutes = Math.floor(diff / (1000 * 60));
-          const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-          setTimeUntilNextImport(`${minutes}m ${seconds}s`);
-        }
-      }
+    return () => {
+      if (interval) clearInterval(interval);
     };
+  }, [isImporting, timeRemaining, autoImportMutation]);
 
-    updateCountdown(); // Initial call
-    countdownInterval = setInterval(updateCountdown, 1000);
-
-    return () => clearInterval(countdownInterval);
-  }, [nextImportTime, isImporting, autoImportMutation]);
+  // Format time as MM:SS
+  const formatTime = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   // Handle refresh
   const handleRefresh = async (): Promise<void> => {
@@ -412,7 +388,7 @@ export default function PropertiesPage() {
       title="Properties Management"
       description="Manage all property listings across your platform"
     >
-      {/* Auto-import status bar */}
+      {/* Auto-import status bar with fixed timer */}
       <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -425,17 +401,32 @@ export default function PropertiesPage() {
                 Last import: {lastImportTime.toLocaleTimeString()}
               </span>
             )}
-            {nextImportTime && (
-              <span className="text-xs text-blue-600">
-                Next import in: {timeUntilNextImport}
-              </span>
-            )}
-            {isImporting && (
+            
+            {isImporting ? (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
-                <span className="text-xs">Importing...</span>
+                <span className="text-xs font-medium">Importing...</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-blue-600">Next import in:</span>
+                <span className="text-sm font-mono font-bold text-blue-800 bg-blue-100 px-2 py-1 rounded">
+                  {formatTime(timeRemaining)}
+                </span>
               </div>
             )}
+          </div>
+        </div>
+        
+        {/* Progress bar */}
+        <div className="mt-3">
+          <div className="w-full bg-blue-200 rounded-full h-1.5">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full transition-all duration-1000 ease-linear"
+              style={{ 
+                width: `${((15 * 60 - timeRemaining) / (15 * 60)) * 100}%` 
+              }}
+            ></div>
           </div>
         </div>
       </div>
