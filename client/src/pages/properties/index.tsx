@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"; // Import useRef
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashLayout } from "@/components/layout/dash-layout";
@@ -10,12 +10,12 @@ import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock
 import { ColumnDef } from "@tanstack/react-table";
 import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
 import { CSVUpload } from "@/components/ui/csv-upload";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription 
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -64,9 +64,6 @@ interface ImportResponse {
   errorDetails: any[];
 }
 
-// Define the interval outside the component to avoid re-creation on re-renders
-const AUTO_IMPORT_INTERVAL_SECONDS = 15 * 60; // 15 minutes
-
 export default function PropertiesPage() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
@@ -74,48 +71,11 @@ export default function PropertiesPage() {
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-
-  // Use useRef to store the interval ID for external cleanup
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Initialize state from sessionStorage or default values
-  const [isImporting, setIsImporting] = useState<boolean>(() => {
-    try {
-      const stored = sessionStorage.getItem('isImporting');
-      return stored ? JSON.parse(stored) : false;
-    } catch (e) {
-      console.error("Failed to read isImporting from sessionStorage", e);
-      return false;
-    }
-  });
-
-  const [lastImportTime, setLastImportTime] = useState<Date | null>(() => {
-    try {
-      const stored = sessionStorage.getItem('lastImportTime');
-      return stored ? new Date(JSON.parse(stored)) : null;
-    } catch (e) {
-      console.error("Failed to read lastImportTime from sessionStorage", e);
-      return null;
-    }
-  });
-
-  // Calculate initial time remaining based on last import time and current time
-  const [timeRemaining, setTimeRemaining] = useState<number>(() => {
-    try {
-      const storedLastImportTime = sessionStorage.getItem('lastImportTime');
-      if (storedLastImportTime) {
-        const lastTime = new Date(JSON.parse(storedLastImportTime));
-        const elapsedTime = (Date.now() - lastTime.getTime()) / 1000; // in seconds
-        return Math.max(0, AUTO_IMPORT_INTERVAL_SECONDS - elapsedTime);
-      }
-      const storedTimeRemaining = sessionStorage.getItem('timeRemaining'); // Also try to get timeRemaining directly
-      return storedTimeRemaining ? JSON.parse(storedTimeRemaining) : AUTO_IMPORT_INTERVAL_SECONDS;
-    } catch (e) {
-      console.error("Failed to read timer state from sessionStorage", e);
-      return AUTO_IMPORT_INTERVAL_SECONDS;
-    }
-  });
-
+  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
+  
+  // Replace the complex timer logic with simple countdown
+  const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60); // 15 minutes in seconds
 
   // Fetch properties
   const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
@@ -126,20 +86,15 @@ export default function PropertiesPage() {
   const autoImportMutation = useMutation<ImportResponse, Error>({
     mutationFn: async (): Promise<ImportResponse> => {
       setIsImporting(true);
-      sessionStorage.setItem('isImporting', JSON.stringify(true)); // Persist importing state
       const result = await apiRequest("GET", "/api/import-properties");
       return result as ImportResponse;
     },
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
-      const now = new Date();
-      setLastImportTime(now);
-      sessionStorage.setItem('lastImportTime', JSON.stringify(now)); // Persist last import time
-
+      setLastImportTime(new Date());
+      
       // Reset timer to 15 minutes after successful import
-      setTimeRemaining(AUTO_IMPORT_INTERVAL_SECONDS);
-      sessionStorage.setItem('timeRemaining', JSON.stringify(AUTO_IMPORT_INTERVAL_SECONDS));
-
+      setTimeRemaining(15 * 60);
 
       const { processed = 0, errors = 0, results = [], total = 0 } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
@@ -172,12 +127,10 @@ export default function PropertiesPage() {
         variant: "destructive",
       });
       // Reset timer even on error
-      setTimeRemaining(AUTO_IMPORT_INTERVAL_SECONDS);
-      sessionStorage.setItem('timeRemaining', JSON.stringify(AUTO_IMPORT_INTERVAL_SECONDS));
+      setTimeRemaining(15 * 60);
     },
     onSettled: () => {
       setIsImporting(false);
-      sessionStorage.setItem('isImporting', JSON.stringify(false));
     },
   });
 
@@ -188,60 +141,27 @@ export default function PropertiesPage() {
     }
   };
 
-  // Timer effect
+  // Simple countdown timer effect
   useEffect(() => {
-    // Clear any existing interval when the component mounts or dependencies change
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
+    let interval: NodeJS.Timeout;
 
     if (!isImporting && timeRemaining > 0) {
-      intervalRef.current = setInterval(() => {
+      interval = setInterval(() => {
         setTimeRemaining(prev => {
-          const newTime = prev - 1;
-          sessionStorage.setItem('timeRemaining', JSON.stringify(newTime)); // Persist every second
-          if (newTime <= 0) {
+          if (prev <= 1) {
             // Timer reached 0, trigger import
             autoImportMutation.mutate();
-            return 0; // Return 0 immediately, actual reset happens on onSuccess/onError
+            return 0;
           }
-          return newTime;
+          return prev - 1;
         });
       }, 1000);
     }
 
-    // Cleanup function: Clear interval and persist state when component unmounts
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      // Persist current state on unmount
-      sessionStorage.setItem('isImporting', JSON.stringify(isImporting));
-      sessionStorage.setItem('lastImportTime', JSON.stringify(lastImportTime));
-      sessionStorage.setItem('timeRemaining', JSON.stringify(timeRemaining));
+      if (interval) clearInterval(interval);
     };
-  }, [isImporting, timeRemaining, lastImportTime, autoImportMutation]); // Added lastImportTime as a dependency
-
-  // Effect to handle initial calculation of timeRemaining when page loads/reloads
-  // This helps ensure accuracy if the page was closed and reopened quickly
-  useEffect(() => {
-    if (!isImporting && lastImportTime) {
-      const now = Date.now();
-      const elapsedTime = (now - lastImportTime.getTime()) / 1000; // in seconds
-      const calculatedTimeRemaining = Math.max(0, AUTO_IMPORT_INTERVAL_SECONDS - elapsedTime);
-
-      // Only update if there's a significant difference to avoid unnecessary re-renders
-      if (Math.abs(calculatedTimeRemaining - timeRemaining) > 1) {
-        setTimeRemaining(calculatedTimeRemaining);
-        sessionStorage.setItem('timeRemaining', JSON.stringify(calculatedTimeRemaining));
-      }
-    } else if (!isImporting && !lastImportTime && timeRemaining === 0) {
-      // If no last import time and timer is 0, reset it (e.g., if import failed to start initially)
-      setTimeRemaining(AUTO_IMPORT_INTERVAL_SECONDS);
-      sessionStorage.setItem('timeRemaining', JSON.stringify(AUTO_IMPORT_INTERVAL_SECONDS));
-    }
-  }, [lastImportTime, isImporting]);
-
+  }, [isImporting, timeRemaining, autoImportMutation]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number): string => {
@@ -405,11 +325,11 @@ export default function PropertiesPage() {
       cell: ({ row }) => {
         const status = row.original.propertyStatus;
         let badgeVariant: "default" | "secondary" | "destructive" | "outline" = "outline";
-
+        
         if (status === "Off Plan") badgeVariant = "secondary";
         else if (status === "Ready") badgeVariant = "default";
         else if (status === "Sold") badgeVariant = "destructive";
-
+        
         return (
           <Badge variant={badgeVariant}>
             {status}
@@ -426,9 +346,9 @@ export default function PropertiesPage() {
         if (!agent || (Array.isArray(agent) && agent.length === 0)) {
           return <div className="text-muted-foreground">Unassigned</div>;
         }
-
+        
         const agentName = Array.isArray(agent) ? agent[0]?.name : agent.name;
-
+        
         return (
           <div className="flex items-center">
             <div className="flex-shrink-0 h-8 w-8 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-600">
@@ -481,7 +401,7 @@ export default function PropertiesPage() {
                 Last import: {lastImportTime.toLocaleTimeString()}
               </span>
             )}
-
+            
             {isImporting ? (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -497,14 +417,14 @@ export default function PropertiesPage() {
             )}
           </div>
         </div>
-
+        
         {/* Progress bar */}
         <div className="mt-3">
           <div className="w-full bg-blue-200 rounded-full h-1.5">
-            <div
+            <div 
               className="bg-blue-600 h-1.5 rounded-full transition-all duration-1000 ease-linear"
-              style={{
-                width: `${((AUTO_IMPORT_INTERVAL_SECONDS - timeRemaining) / AUTO_IMPORT_INTERVAL_SECONDS) * 100}%`
+              style={{ 
+                width: `${((15 * 60 - timeRemaining) / (15 * 60)) * 100}%` 
               }}
             ></div>
           </div>
@@ -513,15 +433,15 @@ export default function PropertiesPage() {
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div className="mt-4 md:mt-0 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-          <Button
+          <Button 
             onClick={() => setLocation("/properties/new")}
             className="flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
             Add Property
           </Button>
-          <Button
-            variant="outline"
+          <Button 
+            variant="outline" 
             onClick={handleManualImport}
             className="flex items-center gap-2"
             disabled={isImporting}
@@ -529,15 +449,15 @@ export default function PropertiesPage() {
             <Download className={`h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
             {isImporting ? "Importing..." : "Import Now"}
           </Button>
-          <Button
-            variant="outline"
+          <Button 
+            variant="outline" 
             onClick={handleExportCSV}
             className="flex items-center gap-2"
           >
             <FileDown className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button
+          <Button 
             variant="outline"
             onClick={() => setIsImportDialogOpen(true)}
             className="flex items-center gap-2"
@@ -545,7 +465,7 @@ export default function PropertiesPage() {
             <FileUp className="h-4 w-4" />
             Import CSV
           </Button>
-          <Button
+          <Button 
             variant="outline"
             onClick={handleRefresh}
             className="flex items-center gap-2"
@@ -554,7 +474,7 @@ export default function PropertiesPage() {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button
+          <Button 
             variant="destructive"
             onClick={handleDeleteAll}
             className="flex items-center gap-2"
@@ -631,7 +551,7 @@ export default function PropertiesPage() {
               Delete All Properties?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete **ALL {properties.length} properties** from your database.
+              This will permanently delete <strong>ALL {properties.length} properties</strong> from your database.
               This action cannot be undone and will remove all property data, including images, descriptions, and associated records.
               <br /><br />
               Are you absolutely sure you want to proceed?
@@ -639,7 +559,7 @@ export default function PropertiesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            <AlertDialogAction 
               onClick={confirmDeleteAll}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteAllPropertiesMutation.isPending}
