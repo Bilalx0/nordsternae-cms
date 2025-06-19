@@ -17,43 +17,43 @@
   ],
   "rewrites": [
     {
-      "source": "/api/properties(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/properties.ts"
     },
     {
-      "source": "/api/sitemap(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/sitemap.ts"
     },
     {
-      "source": "/api/neighborhoods(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/neighborhoods.ts"
     },
     {
-      "source": "/api/enquiries(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/enquiries.ts"
     },
     {
-      "source": "/api/developments(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/developments.ts"
     },
     {
-      "source": "/api/developers(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/developers.ts"
     },
     {
-      "source": "/api/banner-highlights(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/banner-highlights.ts"
     },
     {
-      "source": "/api/agents(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/agents.ts"
     },
     {
-      "source": "/api/articles(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/articles.ts"
     },
     {
-      "source": "/api/import-properties(/(.*))?",
+      "source": "/api/(.*)",
       "destination": "/api/import-properties.ts"
     },
     {

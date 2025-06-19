@@ -116,8 +116,7 @@ function mapXmlToPropertySchema(xmlProperty: any): Partial<InsertProperty> {
     };
   } catch (error) {
     console.error('Error mapping XML property:', error);
-    throw new Error(`Failed
-      to map XML property: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to map XML property: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -150,6 +149,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  // Cache response if XML data is stable
+  res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=30');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -197,7 +198,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('XML parsed successfully, structure:', Object.keys(result));
       
       // Extract properties array from the parsed XML
-      // The structure is <list><property>...</property>...</list>
       const xmlProperties = result.list?.property || [];
       
       if (!Array.isArray(xmlProperties) || xmlProperties.length === 0) {
@@ -207,58 +207,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       console.log(`Found ${xmlProperties.length} properties in XML data`);
       
-      // Process each property
-      const importResults = [];
-      const errors = [];
-      
+      // Collect all properties for batch upsert
+      const propertiesToUpsert = [];
+      const references = [];
       for (const xmlProperty of xmlProperties) {
-        try {
-          // Map XML property to our schema
-          const propertyData = mapXmlToPropertySchema(xmlProperty);
-          
-          // Use reference_number as the reference
-          const reference = xmlProperty.reference_number?.[0];
-          if (!reference) {
-            throw new Error('Property missing reference number');
-          }
-          
-          // Check if property with this reference already exists
-          const existingProperty = await storage.getPropertyByReference(reference);
-          
-          if (existingProperty) {
-            // Update existing property
-            const updatedProperty = await storage.updateProperty(existingProperty.id, propertyData);
-            importResults.push({
-              reference: reference,
-              action: 'updated',
-              id: existingProperty.id
-            });
-          } else {
-            // Create new property
-            const newProperty = await storage.createProperty(propertyData as any);
-            importResults.push({
-              reference: reference,
-              action: 'created',
-              id: newProperty.id
-            });
-          }
-        } catch (error) {
-          console.error('Error processing property:', error);
-          errors.push({
-            reference: xmlProperty.reference_number?.[0] || 'unknown',
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
+        const propertyData = mapXmlToPropertySchema(xmlProperty);
+        const reference = xmlProperty.reference_number?.[0];
+        if (!reference) {
+          console.warn('Skipping property with missing reference number');
+          continue;
         }
+        propertiesToUpsert.push(propertyData);
+        references.push(reference);
       }
-      
-      // Return import results
+
+      // Perform batch upsert
+      await storage.upsertProperties(propertiesToUpsert);
+
+      // Prepare response
       return res.status(200).json({
         message: 'Import completed',
         total: xmlProperties.length,
-        processed: importResults.length,
-        errors: errors.length,
-        results: importResults,
-        errorDetails: errors
+        processed: propertiesToUpsert.length,
+        errors: 0,
+        results: references.map(ref => ({ reference: ref, action: 'upserted' })),
+        errorDetails: []
       });
     } catch (parseError) {
       console.error('Error parsing XML:', parseError);

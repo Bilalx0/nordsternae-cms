@@ -17,6 +17,9 @@ const db = drizzle(client, { schema });
 
 // StorageInterface defines all CRUD operations for the application
 export interface IStorage {
+
+  upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<void>;
+
   // User operations
   getUser(id: number): Promise<schema.User | undefined>;
   getUserByUsername(username: string): Promise<schema.User | undefined>;
@@ -146,6 +149,42 @@ export class DbStorage implements IStorage {
   async deleteProperty(id: number): Promise<boolean> {
     const result = await db.delete(schema.properties).where(eq(schema.properties.id, id));
     return result.count > 0;
+  }
+
+  async upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<void> {
+    await db.insert(schema.properties).values(properties as schema.InsertProperty[]).onConflictDoUpdate({
+      target: schema.properties.reference,
+      set: {
+        listingType: schema.properties.listingType,
+        propertyType: schema.properties.propertyType,
+        subCommunity: schema.properties.subCommunity,
+        community: schema.properties.community,
+        region: schema.properties.region,
+        country: schema.properties.country,
+        agent: schema.properties.agent,
+        price: schema.properties.price,
+        currency: schema.properties.currency,
+        bedrooms: schema.properties.bedrooms,
+        bathrooms: schema.properties.bathrooms,
+        propertyStatus: schema.properties.propertyStatus,
+        title: schema.properties.title,
+        description: schema.properties.description,
+        sqfeetArea: schema.properties.sqfeetArea,
+        sqfeetBuiltup: schema.properties.sqfeetBuiltup,
+        isExclusive: schema.properties.isExclusive,
+        amenities: schema.properties.amenities,
+        isFeatured: schema.properties.isFeatured,
+        isFitted: schema.properties.isFitted,
+        isFurnished: schema.properties.isFurnished,
+        lifestyle: schema.properties.lifestyle,
+        permit: schema.properties.permit,
+        brochure: schema.properties.brochure,
+        images: schema.properties.images,
+        development: schema.properties.development,
+        neighbourhood: schema.properties.neighbourhood,
+        sold: schema.properties.sold,
+      },
+    });
   }
 
   // Neighborhood methods
