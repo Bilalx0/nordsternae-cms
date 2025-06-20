@@ -146,27 +146,27 @@ export default function PropertyEditPage() {
       const formData = { ...propertyData };
       
       // Convert string price to number if needed
-      if (typeof formData.price === 'string') {
-        formData.price = parseFloat(formData.price);
+      if (typeof (formData as PropertyFormValues).price === 'string') {
+        (formData as PropertyFormValues).price = parseFloat(String((formData as PropertyFormValues).price));
       }
       
       // Convert string numbers to actual numbers
-      if (typeof formData.bedrooms === 'string') {
-        formData.bedrooms = parseInt(formData.bedrooms);
+      if (typeof (formData as PropertyFormValues).bedrooms === 'string') {
+        (formData as PropertyFormValues).bedrooms = parseInt(String((formData as PropertyFormValues).bedrooms));
       }
-      if (typeof formData.bathrooms === 'string') {
-        formData.bathrooms = parseInt(formData.bathrooms);
+      if (typeof (formData as PropertyFormValues).bathrooms === 'string') {
+        (formData as PropertyFormValues).bathrooms = parseInt(String((formData as PropertyFormValues).bathrooms));
       }
-      if (typeof formData.sqfeetArea === 'string') {
-        formData.sqfeetArea = parseInt(formData.sqfeetArea);
+      if (typeof (formData as PropertyFormValues).sqfeetArea === 'string') {
+        (formData as PropertyFormValues).sqfeetArea = parseInt(String((formData as PropertyFormValues).sqfeetArea));
       }
-      if (typeof formData.sqfeetBuiltup === 'string') {
-        formData.sqfeetBuiltup = parseInt(formData.sqfeetBuiltup);
+      if (typeof (formData as PropertyFormValues).sqfeetBuiltup === 'string') {
+        (formData as PropertyFormValues).sqfeetBuiltup = parseInt(String((formData as PropertyFormValues).sqfeetBuiltup));
       }
       
       // Ensure amenities is a string
-      if (Array.isArray(formData.amenities)) {
-        formData.amenities = formData.amenities.join(',');
+      if (Array.isArray((formData as PropertyFormValues).amenities)) {
+        (formData as PropertyFormValues).amenities = ((formData as PropertyFormValues).amenities || []).join(',');
       }
       
       form.reset(formData);
@@ -889,7 +889,7 @@ export default function PropertyEditPage() {
                         <FormLabel>Assigned Agent</FormLabel>
                         <Select 
                           onValueChange={(value) => {
-                            const selectedAgent = agents.find((a: any) => a.id === parseInt(value));
+                            const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
                             if (selectedAgent) {
                               field.onChange([{ 
                                 id: selectedAgent.id.toString(), 
@@ -907,7 +907,7 @@ export default function PropertyEditPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {agents.map((agent: any) => (
+                            {(agents as Array<{id: number; name: string}>).map((agent) => (
                               <SelectItem key={agent.id} value={agent.id.toString()}>
                                 {agent.name}
                               </SelectItem>
@@ -957,7 +957,7 @@ export default function PropertyEditPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/properties")}
+                onClick={() => setLocation("/properties")}
                 className="mr-2"
               >
                 Cancel
