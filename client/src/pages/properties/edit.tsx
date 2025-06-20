@@ -238,6 +238,8 @@ export default function PropertyEditPage() {
     form.setValue('amenities', newAmenities.join(','));
   };
 
+  console.log(propertyData);
+
   return (
     <DashLayout
       title={isNewProperty ? "Add New Property" : "Edit Property"}
