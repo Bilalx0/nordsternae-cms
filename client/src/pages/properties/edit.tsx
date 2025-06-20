@@ -22,9 +22,9 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
+  CardDescription,
 } from "@/components/ui/card.jsx";
 import {
   Form,
@@ -143,32 +143,39 @@ export default function PropertyEditPage() {
   // Populate form when property data is loaded
   useEffect(() => {
     if (propertyData) {
-      const formData = { ...propertyData };
-      
-      // Convert string price to number if needed
-      if (typeof (formData as PropertyFormValues).price === 'string') {
-        (formData as PropertyFormValues).price = parseFloat(String((formData as PropertyFormValues).price));
-      }
-      
-      // Convert string numbers to actual numbers
-      if (typeof (formData as PropertyFormValues).bedrooms === 'string') {
-        (formData as PropertyFormValues).bedrooms = parseInt(String((formData as PropertyFormValues).bedrooms));
-      }
-      if (typeof (formData as PropertyFormValues).bathrooms === 'string') {
-        (formData as PropertyFormValues).bathrooms = parseInt(String((formData as PropertyFormValues).bathrooms));
-      }
-      if (typeof (formData as PropertyFormValues).sqfeetArea === 'string') {
-        (formData as PropertyFormValues).sqfeetArea = parseInt(String((formData as PropertyFormValues).sqfeetArea));
-      }
-      if (typeof (formData as PropertyFormValues).sqfeetBuiltup === 'string') {
-        (formData as PropertyFormValues).sqfeetBuiltup = parseInt(String((formData as PropertyFormValues).sqfeetBuiltup));
-      }
-      
-      // Ensure amenities is a string
-      if (Array.isArray((formData as PropertyFormValues).amenities)) {
-        (formData as PropertyFormValues).amenities = ((formData as PropertyFormValues).amenities || []).join(',');
-      }
-      
+      const formData: PropertyFormValues = { ...defaultValues, ...propertyData };
+
+      // Handle numeric fields
+      formData.price = typeof formData.price === 'string' ? parseFloat(formData.price) || 0 : formData.price || 0;
+      formData.bedrooms = typeof formData.bedrooms === 'string' ? parseInt(formData.bedrooms) || undefined : formData.bedrooms;
+      formData.bathrooms = typeof formData.bathrooms === 'string' ? parseInt(formData.bathrooms) || undefined : formData.bathrooms;
+      formData.sqfeetArea = typeof formData.sqfeetArea === 'string' ? parseInt(formData.sqfeetArea) || undefined : formData.sqfeetArea;
+      formData.sqfeetBuiltup = typeof formData.sqfeetBuiltup === 'string' ? parseInt(formData.sqfeetBuiltup) || undefined : formData.sqfeetBuiltup;
+
+      // Handle amenities
+      formData.amenities = Array.isArray(formData.amenities) ? formData.amenities.join(',') : formData.amenities || '';
+
+      // Ensure boolean fields
+      formData.isExclusive = !!formData.isExclusive;
+      formData.isFeatured = !!formData.isFeatured;
+      formData.isFitted = !!formData.isFitted;
+      formData.isFurnished = !!formData.isFurnished;
+      formData.isDisabled = !!formData.isDisabled;
+      formData.sold = !!formData.sold;
+
+      // Ensure string fields have fallback
+      formData.subCommunity = formData.subCommunity || '';
+      formData.description = formData.description || '';
+      formData.lifestyle = formData.lifestyle || '';
+      formData.permit = formData.permit || '';
+      formData.brochure = formData.brochure || '';
+      formData.development = formData.development || '';
+      formData.neighbourhood = formData.neighbourhood || '';
+
+      // Ensure array fields
+      formData.images = Array.isArray(formData.images) ? formData.images : [];
+      formData.agent = Array.isArray(formData.agent) ? formData.agent : [];
+
       form.reset(formData);
     }
   }, [propertyData, form]);
@@ -194,7 +201,7 @@ export default function PropertyEditPage() {
           ? "The property has been successfully created." 
           : "The property has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/proproperties'] });
       setLocation("/properties");
     },
     onError: (error) => {
@@ -216,7 +223,7 @@ export default function PropertyEditPage() {
     const amenitiesValue = form.watch('amenities');
     if (!amenitiesValue) return [];
     return typeof amenitiesValue === 'string' 
-      ? amenitiesValue.split(',') 
+      ? amenitiesValue.split(',').filter(Boolean) 
       : amenitiesValue;
   };
   
