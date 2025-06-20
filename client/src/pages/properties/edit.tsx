@@ -39,6 +39,30 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+// Define amenities mapping for abbreviations to full names and vice versa
+const amenitiesMapping: { [key: string]: string } = {
+  CP: "Covered parking",
+  SE: "Security",
+  BA: "Balcony",
+  BL: "Built in wardrobes",
+  SP: "Private Pool",
+  SY: "Study",
+  VW: "Sea/Water view",
+};
+
+// Reverse mapping for saving amenities
+const reverseAmenitiesMapping: { [key: string]: string } = Object.fromEntries(
+  Object.entries(amenitiesMapping).map(([abbr, full]) => [full, abbr])
+);
+
+// Normalize country codes
+const normalizeCountryCode = (country: string) => {
+  const countryMap: { [key: string]: string } = {
+    UAE: "AE",
+  };
+  return countryMap[country] || country;
+};
+
 const propertyFormSchema = z.object({
   reference: z.string().min(3, "Reference must be at least 3 characters"),
   listingType: z.string(),
@@ -118,7 +142,7 @@ const amenitiesList = [
 
 export default function PropertyEditPage() {
   const [match, params] = useRoute("/properties/:id");
-  const [_, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const isNewProperty = !match || params?.id === "new";
   const propertyId = isNewProperty ? null : parseInt(params?.id || "");
@@ -144,31 +168,19 @@ export default function PropertyEditPage() {
   useEffect(() => {
     if (propertyData) {
       const formData = { ...propertyData };
-      
-      // Convert string price to number if needed
-      if (typeof formData.price === 'string') {
-        formData.price = parseFloat(formData.price);
+
+      // Normalize country code
+      formData.country = normalizeCountryCode(formData.country);
+
+      // Map amenities abbreviations to full names
+      if (typeof formData.amenities === 'string') {
+        formData.amenities = formData.amenities
+          .split(',')
+          .map((abbr) => amenitiesMapping[abbr.trim()] || abbr.trim())
+          .filter((amenity) => amenitiesList.includes(amenity))
+          .join(',');
       }
-      
-      // Convert string numbers to actual numbers
-      if (typeof formData.bedrooms === 'string') {
-        formData.bedrooms = parseInt(formData.bedrooms);
-      }
-      if (typeof formData.bathrooms === 'string') {
-        formData.bathrooms = parseInt(formData.bathrooms);
-      }
-      if (typeof formData.sqfeetArea === 'string') {
-        formData.sqfeetArea = parseInt(formData.sqfeetArea);
-      }
-      if (typeof formData.sqfeetBuiltup === 'string') {
-        formData.sqfeetBuiltup = parseInt(formData.sqfeetBuiltup);
-      }
-      
-      // Ensure amenities is a string
-      if (Array.isArray(formData.amenities)) {
-        formData.amenities = formData.amenities.join(',');
-      }
-      
+
       form.reset(formData);
     }
   }, [propertyData, form]);
@@ -176,15 +188,20 @@ export default function PropertyEditPage() {
   // Save property mutation
   const saveMutation = useMutation({
     mutationFn: async (data: PropertyFormValues) => {
-      // Parse amenities selection from array of strings to comma-separated string
-      if (Array.isArray(data.amenities)) {
-        data.amenities = data.amenities.join(',');
+      const submissionData = { ...data };
+
+      // Convert full amenity names back to abbreviations
+      if (typeof submissionData.amenities === 'string') {
+        submissionData.amenities = submissionData.amenities
+          .split(',')
+          .map((amenity) => reverseAmenitiesMapping[amenity.trim()] || amenity.trim())
+          .join(',');
       }
-      
+
       if (isNewProperty) {
-        return apiRequest("POST", "/api/properties", data);
+        return apiRequest("POST", "/api/properties", submissionData);
       } else {
-        return apiRequest("PUT", `/api/properties/${propertyId}`, data);
+        return apiRequest("PUT", `/api/properties/${propertyId}`, submissionData);
       }
     },
     onSuccess: () => {
@@ -216,7 +233,7 @@ export default function PropertyEditPage() {
     const amenitiesValue = form.watch('amenities');
     if (!amenitiesValue) return [];
     return typeof amenitiesValue === 'string' 
-      ? amenitiesValue.split(',') 
+      ? amenitiesValue.split(',').map((a) => a.trim()) 
       : amenitiesValue;
   };
   
@@ -225,7 +242,7 @@ export default function PropertyEditPage() {
   const toggleAmenity = (amenity: string) => {
     const currentAmenities = getSelectedAmenities();
     const newAmenities = currentAmenities.includes(amenity)
-      ? currentAmenities.filter(a => a !== amenity)
+      ? currentAmenities.filter((a) => a !== amenity)
       : [...currentAmenities, amenity];
     
     form.setValue('amenities', newAmenities.join(','));
@@ -454,9 +471,21 @@ export default function PropertyEditPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Country</FormLabel>
-                        <FormControl>
-                          <Input placeholder="AE" {...field} />
-                        </FormControl>
+                        <Select
+                          onValueChange={field.onChange}
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select country" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="AE">United Arab Emirates</SelectItem>
+                            <SelectItem value="US">United States</SelectItem>
+                            <SelectItem value="GB">United Kingdom</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -841,6 +870,16 @@ export default function PropertyEditPage() {
                           maxFiles={10}
                         />
                       </FormControl>
+                      <div className="mt-2">
+                        {field.value?.map((url, index) => (
+                          <img
+                            key={index}
+                            src={url}
+                            alt={`Property image ${index + 1}`}
+                            className="w-24 h-24 object-cover inline-block mr-2"
+                          />
+                        ))}
+                      </div>
                       <FormDescription>
                         Upload up to 10 images of the property
                       </FormDescription>
@@ -957,7 +996,7 @@ export default function PropertyEditPage() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => navigate("/properties")}
+                onClick={() => setLocation("/properties")}
                 className="mr-2"
               >
                 Cancel
