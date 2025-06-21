@@ -1,8 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { insertAgentSchema } from '../shared/schema.js';
+import { insertEnquirySchema } from '../shared/schema.js';
 import { validateBody } from '../server/utils.js';
 
-// Initialize storage with error handling
 let storage: any = null;
 let storageError: string | null = null;
 
@@ -17,14 +16,13 @@ try {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('=== AGENTS API HANDLER START ===');
+  console.log('=== ENQUIRIES API HANDLER START ===');
   console.log('Method:', req.method);
   console.log('URL:', req.url);
   console.log('Query:', req.query);
   console.log('Storage available:', !!storage);
   console.log('Storage error:', storageError);
 
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -38,74 +36,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ message: 'Storage service unavailable', error: storageError });
   }
 
-  // Safely handle req.url
   if (!req.url) {
     console.log('Invalid request: URL is undefined');
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  // Extract id from URL
-  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'agents');
+  const normalizedUrl = req.url.split('?')[0].replace(/\/+$/, '');
+  const urlParts = normalizedUrl
+    .split('/')
+    .filter(part => part && part !== 'api' && part !== 'enquiries');
   const id = urlParts[0];
-  const hasId = !!id && typeof id === 'string';
-  const agentId = hasId ? parseInt(id) : null;
+  const hasId = !!id && typeof id === 'string' && id !== '';
+  const enquiryId = hasId ? parseInt(id) : null;
 
-  if (hasId && agentId !== null && isNaN(agentId)) {
-    console.log('Invalid ID: not a number after parsing:', id);
-    return res.status(400).json({ message: 'Invalid ID' });
+  if (hasId && (isNaN(enquiryId) || enquiryId <= 0)) {
+    console.log('Invalid ID: not a valid positive number:', id);
+    return res.status(400).json({ message: 'Invalid ID', receivedId: id, method: req.method });
   }
 
-  console.log('Parsed agentId:', agentId);
+  console.log('Parsed enquiryId:', enquiryId);
 
   try {
-    // Base route: /api/agents
     if (!hasId) {
       if (req.method === 'GET') {
-        console.log('Fetching all agents');
-        const agents = await storage.getAgents();
-        console.log('Retrieved agents count:', agents.length);
-        res.status(200).json(agents);
+        console.log('Getting all enquiries...');
+        const enquiries = await storage.getEnquiries();
+        console.log('Got enquiries from storage:', enquiries?.length || 0);
+        return res.status(200).json(enquiries);
       } else if (req.method === 'POST') {
-        const data = validateBody(insertAgentSchema, req, res);
+        console.log('Creating new enquiry...');
+        const data = validateBody(insertEnquirySchema, req, res);
         if (!data) return;
-        console.log('Creating new agent');
-        const agent = await storage.createAgent(data);
-        console.log('Created agent:', agent);
-        res.status(201).json(agent);
+        const result = await storage.createEnquiry(data);
+        console.log('Created enquiry:', result);
+        return res.status(201).json(result);
       } else {
         res.setHeader('Allow', ['GET', 'POST']);
-        res.status(405).json({ message: 'Method not allowed' });
+        return res.status(405).json({ message: 'Method not allowed' });
       }
-    }
-    // Dynamic route: /api/agents/:id
-    else {
+    } else {
       if (req.method === 'GET') {
-        console.log('Querying agent with ID:', agentId);
-        const agent = await storage.getAgent(agentId);
-        console.log('Retrieved agent:', agent);
-        if (!agent) {
-          return res.status(404).json({ message: 'Agent not found' });
+        console.log('Querying enquiry with ID:', enquiryId);
+        const enquiry = await storage.getEnquiry(enquiryId);
+        console.log('Retrieved enquiry:', enquiry);
+        if (!enquiry) {
+          return res.status(404).json({ message: 'Enquiry not found' });
         }
-        res.status(200).json(agent);
+        return res.status(200).json(enquiry);
       } else if (req.method === 'PUT') {
-        const data = validateBody(insertAgentSchema.partial(), req, res);
-        if (!data) return;
-        console.log('Updating agent with ID:', agentId);
-        const agent = await storage.updateAgent(agentId, data);
-        if (!agent) {
-          return res.status(404).json({ message: 'Agent not found' });
+        console.log('Marking enquiry as read with ID:', enquiryId);
+        const enquiry = await storage.markEnquiryAsRead(enquiryId);
+        if (!enquiry) {
+          return res.status(404).json({ message: 'Enquiry not found' });
         }
-        res.status(200).json(agent);
+        return res.status(200).json(enquiry);
       } else if (req.method === 'DELETE') {
-        console.log('Attempting to delete agent with ID:', agentId);
-        const success = await storage.deleteAgent(agentId);
+        console.log('Attempting to delete enquiry with ID:', enquiryId);
+        const success = await storage.deleteEnquiry(enquiryId);
         if (!success) {
-          return res.status(404).json({ message: 'Agent not found' });
+          return res.status(404).json({ message: 'Enquiry not found' });
         }
-        res.status(204).end();
+        return res.status(204).end();
       } else {
         res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
-        res.status(405).json({ message: 'Method not allowed' });
+        return res.status(405).json({ message: 'Method not allowed' });
       }
     }
   } catch (error) {
