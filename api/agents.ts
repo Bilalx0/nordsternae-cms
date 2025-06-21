@@ -2,6 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { insertAgentSchema } from '../shared/schema.js';
 import { validateBody } from '../server/utils.js';
 
+// Initialize storage with error handling
 let storage: any = null;
 let storageError: string | null = null;
 
@@ -23,6 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Storage available:', !!storage);
   console.log('Storage error:', storageError);
 
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -36,91 +38,84 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ message: 'Storage service unavailable', error: storageError });
   }
 
+  // Safely handle req.url
   if (!req.url) {
     console.log('Invalid request: URL is undefined');
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  const normalizedUrl = req.url.split('?')[0].replace(/\/+$/, '');
-  console.log('Normalized URL:', normalizedUrl);
-
-  const urlParts = normalizedUrl
-    .split('/')
-    .filter(part => part && part !== 'api' && part !== 'agents');
+  // Extract id from URL - Fixed logic
+  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'agents');
   console.log('URL parts after filtering:', urlParts);
-
-  const id = urlParts[0];
-  const hasId = !!id && typeof id === 'string' && id !== '';
-  const agentId: number | null = hasId ? parseInt(id) : null;
-
-  if (hasId && (isNaN(agentId as number) || agentId === null || agentId <= 0)) {
-    console.log('Invalid ID: not a valid positive number:', id);
-    return res.status(400).json({
-      message: 'Invalid ID',
-      receivedId: id,
-      method: req.method,
-      url: req.url,
-      normalizedUrl,
-    });
+  
+  const id = urlParts.length > 0 ? urlParts[0] : null;
+  const hasId = id !== null && id !== '';
+  
+  let agentId: number | null = null;
+  
+  // Only try to parse ID if we actually have one
+  if (hasId) {
+    const parsedId = parseInt(id as string);
+    if (isNaN(parsedId)) {
+      console.log('Invalid ID: not a number:', id);
+      return res.status(400).json({ message: 'Invalid ID format. ID must be a number.' });
+    }
+    agentId = parsedId;
   }
 
+  console.log('Has ID:', hasId);
   console.log('Parsed agentId:', agentId);
 
   try {
-    if (!hasId && normalizedUrl === '/api/agents') {
+    // Base route: /api/agents (no ID)
+    if (!hasId) {
       if (req.method === 'GET') {
-        console.log('Getting all agents...');
+        console.log('Fetching all agents');
         const agents = await storage.getAgents();
-        console.log('Got agents from storage:', agents?.length || 0);
-        return res.status(200).json(agents);
+        console.log('Retrieved agents count:', agents.length);
+        res.status(200).json(agents);
       } else if (req.method === 'POST') {
-        console.log('Creating new agent...');
         const data = validateBody(insertAgentSchema, req, res);
         if (!data) return;
-        const result = await storage.createAgent(data);
-        console.log('Created agent:', result);
-        return res.status(201).json(result);
+        console.log('Creating new agent with data:', data);
+        const agent = await storage.createAgent(data);
+        console.log('Created agent:', agent);
+        res.status(201).json(agent);
       } else {
         res.setHeader('Allow', ['GET', 'POST']);
-        return res.status(405).json({ message: 'Method not allowed' });
+        res.status(405).json({ message: 'Method not allowed' });
       }
-    } else if (hasId && agentId !== null) { // Explicit null check
+    }
+    // Dynamic route: /api/agents/:id (has ID)
+    else {
       if (req.method === 'GET') {
         console.log('Querying agent with ID:', agentId);
-        const agent = await storage.getAgent(agentId); // Safe: agentId is number
+        const agent = await storage.getAgent(agentId);
         console.log('Retrieved agent:', agent);
         if (!agent) {
           return res.status(404).json({ message: 'Agent not found' });
         }
-        return res.status(200).json(agent);
+        res.status(200).json(agent);
       } else if (req.method === 'PUT') {
-        console.log('Updating agent with ID:', agentId);
         const data = validateBody(insertAgentSchema.partial(), req, res);
         if (!data) return;
-        const agent = await storage.updateAgent(agentId, data); // Safe: agentId is number
+        console.log('Updating agent with ID:', agentId, 'Data:', data);
+        const agent = await storage.updateAgent(agentId, data);
         if (!agent) {
           return res.status(404).json({ message: 'Agent not found' });
         }
-        return res.status(200).json(agent);
+        res.status(200).json(agent);
       } else if (req.method === 'DELETE') {
         console.log('Attempting to delete agent with ID:', agentId);
-        const success = await storage.deleteAgent(agentId); // Safe: agentId is number
+        const success = await storage.deleteAgent(agentId);
         if (!success) {
           return res.status(404).json({ message: 'Agent not found' });
         }
-        return res.status(204).end();
+        res.status(204).end();
       } else {
         res.setHeader('Allow', ['GET', 'PUT', 'DELETE']);
-        return res.status(405).json({ message: 'Method not allowed' });
+        res.status(405).json({ message: 'Method not allowed' });
       }
-    } else {
-      console.log('Invalid route:', normalizedUrl);
-      return res.status(400).json({
-        message: 'Invalid route',
-        url: req.url,
-        normalizedUrl,
-        method: req.method,
-      });
     }
   } catch (error) {
     console.error('Handler error:', error);
