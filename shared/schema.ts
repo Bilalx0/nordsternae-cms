@@ -2,31 +2,21 @@ import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb } from 
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable('users', {
-  id: serial('id').primaryKey(),
-  email: text('email').notNull().unique(),
-  password: text('password').notNull(),
-  firstName: text('firstName').notNull(),
-  lastName: text('lastName').notNull(),
-  profileImage: text('profileImage'),
-  createdAt: timestamp('createdAt').notNull().defaultNow(),
-  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
-  isActive: boolean('isActive').notNull().default(true),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Refresh tokens table for authentication
-export const refreshTokens = pgTable('refreshTokens', {
-  id: serial('id').primaryKey(),
-  userId: serial('userId').notNull().references(() => users.id),
-  token: text('token').notNull(),
-  createdAt: timestamp('createdAt').notNull().defaultNow(),
-  expiresAt: timestamp('expiresAt').notNull(),
+export const insertUserSchema = createInsertSchema(users).pick({
+  username: true,
+  password: true,
 });
 
-
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-export type RefreshToken = typeof refreshTokens.$inferSelect;
 
 // Properties schema
 export const properties = pgTable("properties", {
