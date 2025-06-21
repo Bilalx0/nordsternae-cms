@@ -1,6 +1,22 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { insertAgentSchema } from '../shared/schema.js';
 import { validateBody } from '../server/utils.js';
+
+// Try to import schema with error handling
+let insertAgentSchema: any = null;
+let schemaError: string | null = null;
+
+try {
+  console.log('Attempting to import agent schema...');
+  const schemaModule = await import('../shared/schema.js');
+  insertAgentSchema = schemaModule.insertAgentSchema;
+  console.log('Agent schema imported:', !!insertAgentSchema);
+  if (!insertAgentSchema) {
+    schemaError = 'insertAgentSchema not found in schema module';
+  }
+} catch (error) {
+  console.error('Schema import error:', error);
+  schemaError = error instanceof Error ? error.message : 'Unknown schema import error';
+}
 
 // Initialize storage with error handling
 let storage: any = null;
@@ -38,6 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ message: 'Storage service unavailable', storageError });
   }
 
+  if (!insertAgentSchema) {
+    console.log('Schema unavailable');
+    return res.status(500).json({ message: 'Agent schema unavailable', error: schemaError });
+  }
+
   // Safely handle req.url
   if (!req.url) {
     console.log('Invalid request: URL is undefined');
@@ -62,15 +83,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!hasId) {
       if (req.method === 'GET') {
         console.log('Fetching all agents');
+        
+        // Check if storage methods exist
+        if (!storage.getAgents) {
+          console.log('storage.getAgents method not found');
+          return res.status(500).json({ message: 'getAgents method not available' });
+        }
+        
         const agents = await storage.getAgents();
-        console.log('Retrieved agents count:', agents.length);
-        res.status(200).json(agents);
+        console.log('Retrieved agents count:', agents?.length || 0);
+        res.status(200).json(agents || []);
       } else if (req.method === 'POST') {
-        const data = validateBody(insertAgentSchema, req, res);
-        if (!data) return;
         console.log('Creating new agent');
+        console.log('Request body:', JSON.stringify(req.body, null, 2));
+        
+        // Check if storage methods exist
+        if (!storage.createAgent) {
+          console.log('storage.createAgent method not found');
+          return res.status(500).json({ message: 'createAgent method not available' });
+        }
+        
+        const data = validateBody(insertAgentSchema, req, res);
+        if (!data) {
+          console.log('Validation failed for agent creation');
+          return;
+        }
+        console.log('Validated data:', JSON.stringify(data, null, 2));
+        
         const agent = await storage.createAgent(data);
-        console.log('Created agent:', agent);
+        console.log('Created agent:', JSON.stringify(agent, null, 2));
         res.status(201).json(agent);
       } else {
         res.setHeader('Allow', ['GET', 'POST']);
