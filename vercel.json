@@ -54,6 +54,10 @@
     },
     {
       "source": "/api/(.*)",
+      "destination": "/api/auth.ts"
+    },
+    {
+      "source": "/api/(.*)",
       "destination": "/api/import-properties.ts"
     },
     {
