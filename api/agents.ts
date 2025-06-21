@@ -44,23 +44,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  // Extract id from URL - Fixed logic
-  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'agents');
-  console.log('URL parts after filtering:', urlParts);
+  // Extract id from URL - More robust parsing
+  console.log('Full URL:', req.url);
   
-  const id = urlParts.length > 0 ? urlParts[0] : null;
-  const hasId = id !== null && id !== '';
-  
+  // Handle different URL patterns
   let agentId: number | null = null;
+  let hasId = false;
   
-  // Only try to parse ID if we actually have one
-  if (hasId) {
-    const parsedId = parseInt(id as string);
-    if (isNaN(parsedId)) {
-      console.log('Invalid ID: not a number:', id);
-      return res.status(400).json({ message: 'Invalid ID format. ID must be a number.' });
+  // Remove query parameters and clean the URL
+  const cleanUrl = req.url.split('?')[0];
+  console.log('Clean URL:', cleanUrl);
+  
+  // Split and filter URL parts
+  const urlParts = cleanUrl.split('/').filter(part => part !== '');
+  console.log('All URL parts:', urlParts);
+  
+  // Find the agents index and get the next part as ID
+  const agentsIndex = urlParts.findIndex(part => part === 'agents');
+  console.log('Agents index:', agentsIndex);
+  
+  if (agentsIndex !== -1 && agentsIndex < urlParts.length - 1) {
+    const idPart = urlParts[agentsIndex + 1];
+    console.log('ID part from URL:', idPart);
+    
+    if (idPart && idPart !== '') {
+      const parsedId = parseInt(idPart);
+      if (isNaN(parsedId)) {
+        console.log('Invalid ID: not a number:', idPart);
+        return res.status(400).json({ message: 'Invalid ID format. ID must be a number.' });
+      }
+      agentId = parsedId;
+      hasId = true;
     }
-    agentId = parsedId;
   }
 
   console.log('Has ID:', hasId);
