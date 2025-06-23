@@ -15,8 +15,6 @@ if (!process.env.DATABASE_URL) {
 const client = postgres(process.env.DATABASE_URL);
 const db = drizzle(client, { schema });
 
-export { db };
-
 // StorageInterface defines all CRUD operations
 export interface IStorage {
   getAllPropertyReferences(): Promise<{ reference: string }[]>; // Added method
