@@ -24,6 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const agent = await storage.createAgent(data);
         res.status(201).json(agent);
+        console.log('Query:', req.query);
+console.log('Body:', req.body);
       } catch (error) {
         res.status(500).json({ message: 'Failed to create agent' });
       }
