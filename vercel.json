@@ -26,8 +26,9 @@
     { "src": "/api/agents(.*)", "dest": "/api/agents.ts" },
     { "src": "/api/articles(.*)", "dest": "/api/articles.ts" },
     { "src": "/api/import-properties(.*)", "dest": "/api/import-properties/index.ts" },
-    { "src": "/api/auth/register", "dest": "/api/auth/register.ts" },
+    { "src": "/api/auth/register", "dest": "/api/auth.ts" },
     { "src": "/api/auth/login", "dest": "/api/auth.ts" },
+
     { "src": "/api/auth/refresh", "dest": "/api/auth.ts" },
     { "src": "/api/auth/logout", "dest": "/api/auth.ts" },
     { "src": "/api/auth/profile", "dest": "/api/auth.ts" },
