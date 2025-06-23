@@ -15,79 +15,27 @@
       }
     }
   ],
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/properties.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/sitemap.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/neighborhoods.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/enquiries.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/developments.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/developers.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/banner-highlights.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/agents.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/articles.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/auth.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/import-properties.ts"
-    },
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    },
-    {
-      "source": "/assets/(.*)",
-      "destination": "/client/dist/assets/$1"
-    },
-    {
-      "source": "/favicon.ico",
-      "destination": "/client/dist/favicon.ico"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/client/dist/index.html"
-    },
-    {
-      "source": "/properties",
-      "destination": "/client/dist/index.html"
-    },
-    {
-      "source": "/properties/:id",
-      "destination": "/client/dist/index.html"
-    },
-    {
-      "source": "/properties/new",
-      "destination": "/client/dist/index.html"
-    }
-   
+  "routes": [
+    { "src": "/api/properties", "dest": "/api/properties.ts" },
+    { "src": "/api/sitemap", "dest": "/api/sitemap.ts" },
+    { "src": "/api/neighborhoods", "dest": "/api/neighborhoods.ts" },
+    { "src": "/api/enquiries", "dest": "/api/enquiries.ts" },
+    { "src": "/api/developments", "dest": "/api/developments.ts" },
+    { "src": "/api/developers", "dest": "/api/developers.ts" },
+    { "src": "/api/banner-highlights", "dest": "/api/banner-highlights.ts" },
+    { "src": "/api/agents", "dest": "/api/agents.ts" },
+    { "src": "/api/articles", "dest": "/api/articles.ts" },
+    { "src": "/api/auth", "dest": "/api/auth.ts" },
+    { "src": "/api/import-properties", "dest": "/api/import-properties.ts" },
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+
+    { "src": "/assets/(.*)", "dest": "/client/dist/assets/$1" },
+    { "src": "/favicon.ico", "dest": "/client/dist/favicon.ico" },
+
+    { "src": "/properties", "dest": "/client/dist/index.html" },
+    { "src": "/properties/new", "dest": "/client/dist/index.html" },
+    { "src": "/properties/[^/]+", "dest": "/client/dist/index.html" },
+
+    { "src": "/(.*)", "dest": "/client/dist/index.html" }
   ]
 }
