@@ -1,7 +1,7 @@
 // src/components/auth/Register.tsx
 import { useContext, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { toast } from "react-hot-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function Register() {
-  const { login } = useContext(AuthContext); // Use login to auto-login after register
-  const navigate = useNavigate();
+  const { login } = useContext(AuthContext) as { login: (email: string, password: string) => Promise<void> }; // Use login to auto-login after register
+  const [, navigate] = useLocation();
   const [formData, setFormData] = useState({
     email: "",
     password: "",

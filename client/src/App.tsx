@@ -36,8 +36,8 @@ import UploadProfileImage from "@/components/settings/UploadProfileImage";
 import DeleteAccount from "@/components/settings/DeleteAccount";
 
 // ProtectedRoute component to guard authenticated routes
-function ProtectedRoute({ component: Component, ...rest }) {
-  const { user } = useContext(AuthContext);
+function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>; [key: string]: any }) {
+  const { user } = useContext(AuthContext) as { user: any };
   const [, navigate] = useLocation();
 
   useEffect(() => {

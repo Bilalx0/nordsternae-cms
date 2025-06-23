@@ -7,8 +7,8 @@ import { useNavigate } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Header } from "@/components/layout/Header";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { Header } from "@/components/layout/header.jsx";
+import { Sidebar } from "@/components/layout/sidebar.jsx";
 
 export default function DeleteAccount() {
   const { accessToken, logout } = useContext(AuthContext);
