@@ -6,8 +6,32 @@ import { validateBody } from '../server/utils.js';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const id = req.query.id ? parseInt(req.query.id as string) : null;
 
-  if (id !== null) {
-    // Handle single agent operations
+  if (id === null) {
+    // Handle collection operations (no id)
+    if (req.method === 'GET') {
+      try {
+        const agents = await storage.getAgents();
+        if (!agents || agents.length === 0) {
+          return res.status(200).json({ message: 'No agents found' });
+        }
+        res.status(200).json(agents);
+      } catch (error) {
+        res.status(500).json({ message: 'Failed to fetch agents' });
+      }
+    } else if (req.method === 'POST') {
+      const data = validateBody(insertAgentSchema, req, res);
+      if (!data) return;
+      try {
+        const agent = await storage.createAgent(data);
+        res.status(201).json(agent);
+      } catch (error) {
+        res.status(500).json({ message: 'Failed to create agent' });
+      }
+    } else {
+      res.status(405).json({ message: 'Method not allowed' });
+    }
+  } else {
+    // Handle single agent operations (with id)
     if (isNaN(id)) {
       return res.status(400).json({ message: 'Invalid ID' });
     }
@@ -43,27 +67,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(204).end();
       } catch (error) {
         res.status(500).json({ message: 'Failed to delete agent' });
-      }
-    } else {
-      res.status(405).json({ message: 'Method not allowed' });
-    }
-  } else {
-    // Handle collection operations
-    if (req.method === 'GET') {
-      try {
-        const agents = await storage.getAgents();
-        res.status(200).json(agents);
-      } catch (error) {
-        res.status(500).json({ message: 'Failed to fetch agents' });
-      }
-    } else if (req.method === 'POST') {
-      const data = validateBody(insertAgentSchema, req, res);
-      if (!data) return;
-      try {
-        const agent = await storage.createAgent(data);
-        res.status(201).json(agent);
-      } catch (error) {
-        res.status(500).json({ message: 'Failed to create agent' });
       }
     } else {
       res.status(405).json({ message: 'Method not allowed' });
