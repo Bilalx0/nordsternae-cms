@@ -16,35 +16,78 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/agents", "destination": "/api/agents/agents.ts" },
-    { "source": "/api/agents/:id", "destination": "/api/agents/agents.ts" },
-    { "source": "/api/properties", "destination": "/api/properties/properties.ts" },
-    { "source": "/api/properties/:id", "destination": "/api/properties/properties.ts" },
-    { "source": "/api/sitemap", "destination": "/api/sitemap.ts" },
-    { "source": "/api/sitemap/:id", "destination": "/api/sitemap.ts" },
-    { "source": "/api/neighborhoods", "destination": "/api/neighborhoods.ts" },
-    { "source": "/api/neighborhoods/:id", "destination": "/api/neighborhoods.ts" },
-    { "source": "/api/enquiries", "destination": "/api/enquiries.ts" },
-    { "source": "/api/enquiries/:id", "destination": "/api/enquiries.ts" },
-    { "source": "/api/developments", "destination": "/api/developments.ts" },
-    { "source": "/api/developments/:id", "destination": "/api/developments.ts" },
-    { "source": "/api/developers", "destination": "/api/developers.ts" },
-    { "source": "/api/developers/:id", "destination": "/api/developers.ts" },
-    { "source": "/api/banner-highlights", "destination": "/api/banner-highlights.ts" },
-    { "source": "/api/banner-highlights/:id", "destination": "/api/banner-highlights.ts" },
-    { "source": "/api/articles", "destination": "/api/articles.ts" },
-    { "source": "/api/articles/:id", "destination": "/api/articles.ts" },
-    { "source": "/api/auth", "destination": "/api/auth.ts" },
-    { "source": "/api/import-properties", "destination": "/api/import-properties.ts" },
-
-
-    { "source": "/assets/(.*)", "destination": "/client/dist/assets/$1" },
-    { "source": "/favicon.ico", "destination": "/client/dist/favicon.ico" },
-
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/properties.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/sitemap.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/neighborhoods.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/enquiries.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/developments.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/developers.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/banner-highlights.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/agents.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/articles.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/auth.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/import-properties.ts"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/client/dist/assets/$1"
+    },
+    {
+      "source": "/favicon.ico",
+      "destination": "/client/dist/favicon.ico"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties",
+      "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties/:id",
+      "destination": "/client/dist/index.html"
+    },
+    {
+      "source": "/properties/new",
+      "destination": "/client/dist/index.html"
+    }
    
-    { "source": "/(.*)", "destination": "/client/dist/index.html" },
-    { "source": "/properties", "destination": "/client/dist/index.html" },
-    { "source": "/properties/:id", "destination": "/client/dist/index.html" },
-    { "source": "/properties/new", "destination": "/client/dist/index.html" }
   ]
 }
