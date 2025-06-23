@@ -1,18 +1,24 @@
-import { useState } from "react";
+// src/components/layout/Header.tsx
+import { useState, useContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Bell, 
-  Search, 
-  Settings, 
-  Menu 
-} from "lucide-react";
+import { Bell, Search, Settings, Menu, LogOut } from "lucide-react";
 import {
   Sheet,
   SheetContent,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Sidebar } from "./sidebar";
+import { AuthContext } from "@/context/AuthContext";
+import { Link } from "wouter";
 
 interface HeaderProps {
   onSearch?: (value: string) => void;
@@ -20,7 +26,8 @@ interface HeaderProps {
 
 export function Header({ onSearch }: HeaderProps) {
   const [searchValue, setSearchValue] = useState("");
-  
+  const { user, logout } = useContext(AuthContext);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (onSearch) {
@@ -70,10 +77,44 @@ export function Header({ onSearch }: HeaderProps) {
           <Bell className="h-5 w-5" />
           <span className="sr-only">Notifications</span>
         </Button>
-        <Button variant="ghost" size="icon" className="hidden md:flex">
-          <Settings className="h-5 w-5" />
-          <span className="sr-only">Settings</span>
-        </Button>
+        {user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="hidden md:flex">
+                <Settings className="h-5 w-5" />
+                <span className="sr-only">Settings</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem>
+                <Link href="/settings/profile">Profile</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/settings/change-password">Change Password</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link href="/settings/upload-image">Upload Profile Image</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-red-600">
+                <Link href="/settings/delete-account">Delete Account</Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={logout}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button variant="ghost" size="icon" className="hidden md:flex">
+            <Link href="/login">
+              <LogOut className="h-5 w-5" />
+              <span className="sr-only">Login</span>
+            </Link>
+          </Button>
+        )}
       </div>
     </header>
   );

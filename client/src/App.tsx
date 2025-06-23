@@ -1,8 +1,12 @@
+// src/App.tsx
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip.jsx";
+import { AuthProvider, AuthContext } from "@/context/AuthContext";
+import { useContext, useEffect } from "react";
+import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found.jsx";
 import Dashboard from "@/pages/dashboard.jsx";
 import PropertiesPage from "@/pages/properties/index.jsx";
@@ -24,57 +28,68 @@ import DeveloperEditPage from "@/pages/developers/edit.jsx";
 import SitemapPage from "@/pages/sitemap/index.jsx";
 import SitemapEditPage from "@/pages/sitemap/edit.jsx";
 import ImportProperties from "@/pages/admin/import-properties.jsx";
+import Login from "@/components/auth/Login";
+import Register from "@/components/auth/Register";
+import UpdateProfile from "@/components/settings/UpdateProfile";
+import ChangePassword from "@/components/settings/ChangePassword";
+import UploadProfileImage from "@/components/settings/UploadProfileImage";
+import DeleteAccount from "@/components/settings/DeleteAccount";
+
+// ProtectedRoute component to guard authenticated routes
+function ProtectedRoute({ component: Component, ...rest }) {
+  const { user } = useContext(AuthContext);
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
+  return user ? <Route {...rest} component={Component} /> : null;
+}
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      
-      {/* Properties routes */}
-      <Route path="/properties" component={PropertiesPage} />
-      <Route path="/properties/new" component={PropertyEditPage} />
-      <Route path="/properties/:id" component={PropertyEditPage} />
-      <Route path="/admin/import-properties" component={ImportProperties} />
-      
-      {/* Agents routes */}
-      <Route path="/agents" component={AgentsPage} />
-      <Route path="/agents/new" component={AgentEditPage} />
-      <Route path="/agents/:id" component={AgentEditPage} />
-      
-      {/* Developments routes */}
-      <Route path="/developments" component={DevelopmentsPage} />
-      <Route path="/developments/new" component={DevelopmentEditPage} />
-      <Route path="/developments/:id" component={DevelopmentEditPage} />
-      
-      {/* Neighborhoods routes */}
-      <Route path="/neighborhoods" component={NeighborhoodsPage} />
-      <Route path="/neighborhoods/new" component={NeighborhoodEditPage} />
-      <Route path="/neighborhoods/:id" component={NeighborhoodEditPage} />
-      
-      {/* Articles routes */}
-      <Route path="/articles" component={ArticlesPage} />
-      <Route path="/articles/new" component={ArticleEditPage} />
-      <Route path="/articles/:id" component={ArticleEditPage} />
-      
-      {/* Enquiries routes */}
-      <Route path="/enquiries" component={EnquiriesPage} />
-      <Route path="/enquiries/:id" component={EnquiryDetailPage} />
-      
-      {/* Banner Highlights routes */}
-      <Route path="/banner-highlights" component={BannerHighlightsPage} />
-      <Route path="/banner-highlights/new" component={BannerHighlightEditPage} />
-      <Route path="/banner-highlights/:id" component={BannerHighlightEditPage} />
-      
-      {/* Developers routes */}
-      <Route path="/developers" component={DevelopersPage} />
-      <Route path="/developers/new" component={DeveloperEditPage} />
-      <Route path="/developers/:id" component={DeveloperEditPage} />
-      
-      {/* Sitemap routes */}
-      <Route path="/sitemap" component={SitemapPage} />
-      <Route path="/sitemap/new" component={SitemapEditPage} />
-      <Route path="/sitemap/:id" component={SitemapEditPage} />
-      
+      {/* Public routes */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+
+      {/* Protected routes */}
+      <ProtectedRoute path="/" component={Dashboard} />
+      <ProtectedRoute path="/properties" component={PropertiesPage} />
+      <ProtectedRoute path="/properties/new" component={PropertyEditPage} />
+      <ProtectedRoute path="/properties/:id" component={PropertyEditPage} />
+      <ProtectedRoute path="/admin/import-properties" component={ImportProperties} />
+      <ProtectedRoute path="/agents" component={AgentsPage} />
+      <ProtectedRoute path="/agents/new" component={AgentEditPage} />
+      <ProtectedRoute path="/agents/:id" component={AgentEditPage} />
+      <ProtectedRoute path="/developments" component={DevelopmentsPage} />
+      <ProtectedRoute path="/developments/new" component={DevelopmentEditPage} />
+      <ProtectedRoute path="/developments/:id" component={DevelopmentEditPage} />
+      <ProtectedRoute path="/neighborhoods" component={NeighborhoodsPage} />
+      <ProtectedRoute path="/neighborhoods/new" component={NeighborhoodEditPage} />
+      <ProtectedRoute path="/neighborhoods/:id" component={NeighborhoodEditPage} />
+      <ProtectedRoute path="/articles" component={ArticlesPage} />
+      <ProtectedRoute path="/articles/new" component={ArticleEditPage} />
+      <ProtectedRoute path="/articles/:id" component={ArticleEditPage} />
+      <ProtectedRoute path="/enquiries" component={EnquiriesPage} />
+      <ProtectedRoute path="/enquiries/:id" component={EnquiryDetailPage} />
+      <ProtectedRoute path="/banner-highlights" component={BannerHighlightsPage} />
+      <ProtectedRoute path="/banner-highlights/new" component={BannerHighlightEditPage} />
+      <ProtectedRoute path="/banner-highlights/:id" component={BannerHighlightEditPage} />
+      <ProtectedRoute path="/developers" component={DevelopersPage} />
+      <ProtectedRoute path="/developers/new" component={DeveloperEditPage} />
+      <ProtectedRoute path="/developers/:id" component={DeveloperEditPage} />
+      <ProtectedRoute path="/sitemap" component={SitemapPage} />
+      <ProtectedRoute path="/sitemap/new" component={SitemapEditPage} />
+      <ProtectedRoute path="/sitemap/:id" component={SitemapEditPage} />
+      <ProtectedRoute path="/settings/profile" component={UpdateProfile} />
+      <ProtectedRoute path="/settings/change-password" component={ChangePassword} />
+      <ProtectedRoute path="/settings/upload-image" component={UploadProfileImage} />
+      <ProtectedRoute path="/settings/delete-account" component={DeleteAccount} />
+
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
@@ -84,10 +99,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

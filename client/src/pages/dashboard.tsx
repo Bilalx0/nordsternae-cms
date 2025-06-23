@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { DashLayout } from "@/components/layout/dash-layout.jsx";
+import { AuthContext } from "@/context/AuthContext";
 import { StatsCard } from "@/components/dashboard/stats-card.jsx";
 import { RecentEnquiries } from "@/components/dashboard/recent-enquiries.jsx";
 import { FeaturedProperties } from "@/components/dashboard/featured-properties.jsx";
@@ -18,6 +19,15 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs.jsx
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Dashboard() {
+  const { user } = useContext(AuthContext);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
   const queryClient = useQueryClient();
   const { data: properties = [] } = useQuery({ 
     queryKey: ['/api/properties'], 
