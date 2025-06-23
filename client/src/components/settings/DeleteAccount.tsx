@@ -3,7 +3,7 @@ import { useContext, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "react-hot-toast";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { Sidebar } from "@/components/layout/sidebar.jsx";
 export default function DeleteAccount() {
   const { accessToken, logout } = useContext(AuthContext);
   const [password, setPassword] = useState("");
-  const navigate = useNavigate();
+  const navigate = useLocation();
 
   const deleteAccountMutation = useMutation({
     mutationFn: async () => {

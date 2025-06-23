@@ -20,7 +20,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 export default function Dashboard() {
   const { user } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const navigate = useLocation();
 
   useEffect(() => {
     if (!user) {

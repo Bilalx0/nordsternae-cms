@@ -1,7 +1,7 @@
 // src/components/auth/Login.tsx
 import { useContext, useState } from "react";
 import { AuthContext } from "@/context/AuthContext";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 import { toast } from "react-hot-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Link } from "wouter";
 
 export default function Login() {
   const { login } = useContext(AuthContext);
-  const navigate = useNavigate();
+  const navigate = useLocation();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
