@@ -14,7 +14,7 @@ const XML_PARSER = new xml2js.Parser({
   mergeAttrs: true,
 });
 
-// Property type mapping (moved outside function for performance)
+// Property type mapping
 const PROPERTY_TYPE_MAP: Record<string, string> = {
   'AP': 'Apartment',
   'VH': 'Villa', 
@@ -29,7 +29,7 @@ const PROPERTY_TYPE_MAP: Record<string, string> = {
 
 const COMMERCIAL_TYPES = new Set(['OF', 'RE', 'WH', 'FA']);
 
-// Default amenities by property type (pre-computed)
+// Default amenities
 const DEFAULT_AMENITIES = {
   commercial: 'Security,Maintenance,Lobby in Building',
   apartment: 'Balcony,Built in wardrobes,Central air conditioning,Covered parking',
@@ -37,7 +37,7 @@ const DEFAULT_AMENITIES = {
 };
 
 /**
- * Fast utility to safely extract first array element or return the value
+ * Safely extract first array element or value
  */
 function extractValue(data: any): string {
   if (!data) return '';
@@ -45,7 +45,7 @@ function extractValue(data: any): string {
 }
 
 /**
- * Fast utility to safely parse integer
+ * Safely parse integer
  */
 function parseIntSafe(value: any): number | null {
   if (!value) return null;
@@ -55,13 +55,13 @@ function parseIntSafe(value: any): number | null {
 }
 
 /**
- * Optimized XML property mapping with minimal logging for speed
+ * Map XML property to schema
  */
 function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
   const reference = extractValue(xmlProperty.reference_number) || '';
   
   try {
-    // Fast price extraction
+    // Price extraction
     let price = 0;
     const priceData = Array.isArray(xmlProperty.price) ? xmlProperty.price[0] : xmlProperty.price;
     if (priceData?.yearly) {
@@ -69,7 +69,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       price = parseInt(rawPrice, 10) || 0;
     }
 
-    // Fast image extraction
+    // Image extraction
     let images: string[] = [];
     const photoData = Array.isArray(xmlProperty.photo) 
       ? (xmlProperty.photo.length > 0 ? xmlProperty.photo[0] : null)
@@ -82,7 +82,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
         .map((url: string) => url.trim().replace(/[`'"\\/]/g, ''));
     }
 
-    // Fast agent extraction
+    // Agent extraction
     let agent = null;
     if (xmlProperty.agent) {
       const agentData = Array.isArray(xmlProperty.agent) ? xmlProperty.agent[0] : xmlProperty.agent;
@@ -92,7 +92,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       }];
     }
 
-    // Fast amenities determination
+    // Amenities determination
     const propertyTypeCode = extractValue(xmlProperty.property_type) || 'AP';
     const isCommercial = COMMERCIAL_TYPES.has(propertyTypeCode);
     let amenities = extractValue(xmlProperty.private_amenities);
@@ -107,7 +107,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       }
     }
 
-    // Fast furnished status check
+    // Furnished status
     const furnishedStatus = extractValue(xmlProperty.furnished).toLowerCase();
     const isFitted = furnishedStatus.includes('partly');
     const isFurnished = furnishedStatus.includes('fully');
@@ -181,7 +181,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       try {
         const response = await axios.get(xmlUrl, {
-          timeout: 10000, // 10 second timeout
+          timeout: 5000,
           headers: {
             'Accept': 'application/xml, text/xml',
             'User-Agent': 'PropertyImporter/1.0'
@@ -193,12 +193,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({
           error: 'Failed to fetch XML data',
           message: error instanceof Error ? error.message : 'Unknown error',
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          processingTimeMs: Date.now() - startTime
         });
       }
     }
     
-    // Fast XML parsing
+    // Parse XML
     let result;
     try {
       result = await XML_PARSER.parseStringPromise(xmlData);
@@ -207,109 +208,107 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({
         error: 'Failed to parse XML data',
         message: parseError instanceof Error ? parseError.message : 'Invalid XML format',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
       });
     }
     
     const xmlProperties = result.list?.property || [];
     
     if (!Array.isArray(xmlProperties) || xmlProperties.length === 0) {
-      return res.status(404).json({ 
+      return res.status(200).json({ 
         message: 'No properties found in XML data',
-        timestamp: new Date().toISOString()
+        total: 0,
+        processed: 0,
+        errors: 0,
+        results: [],
+        errorDetails: [],
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
       });
     }
     
-    console.log(`Processing ${xmlProperties.length} properties...`);
-    
-    // Fast batch processing
-    const propertiesToUpsert: InsertProperty[] = [];
+    // Fetch existing references
+    let existingReferences: Set<string>;
+    try {
+      const references = await storage.getAllPropertyReferences();
+      existingReferences = new Set(references.map(ref => ref.reference));
+    } catch (dbError) {
+      console.error('Error fetching references:', dbError);
+      return res.status(500).json({
+        error: 'Database error',
+        message: 'Failed to fetch existing property references',
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
+      });
+    }
+
+    // Process properties
+    const propertiesToInsert: InsertProperty[] = [];
     const processedReferences: string[] = [];
-    const errors: string[] = [];
+    const errors: Array<{ reference: string; error: string }> = [];
     
     for (const xmlProperty of xmlProperties) {
       try {
         const reference = extractValue(xmlProperty.reference_number);
         if (!reference) {
-          errors.push('Missing reference number');
+          errors.push({ reference: 'unknown', error: 'Missing reference number' });
           continue;
         }
         
+        // Skip existing references
+        if (existingReferences.has(reference)) {
+          continue;
+        }
+
         const propertyData = mapXmlToPropertySchema(xmlProperty);
-        propertiesToUpsert.push(propertyData);
+        propertiesToInsert.push(propertyData);
         processedReferences.push(reference);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown mapping error';
-        errors.push(errorMsg);
+        errors.push({ reference: extractValue(xmlProperty.reference_number) || 'unknown', error: errorMsg });
         console.error('Property mapping error:', errorMsg);
       }
     }
 
-    if (propertiesToUpsert.length === 0) {
-      return res.status(400).json({
-        message: 'No valid properties to process',
-        errors: errors,
-        timestamp: new Date().toISOString()
+    if (propertiesToInsert.length === 0) {
+      return res.status(200).json({
+        message: 'No new properties to insert',
+        total: xmlProperties.length,
+        processed: 0,
+        errors: errors.length,
+        results: [],
+        errorDetails: errors,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
       });
     }
 
-    // Database operation with better error handling
+    // Insert new properties
     try {
-      await storage.insertProperties(propertiesToUpsert);
+      const { success, errors: insertErrors } = await storage.bulkInsertProperties(propertiesToInsert, 100);
+      errors.push(...insertErrors);
+      
+      const processingTime = Date.now() - startTime;
+      return res.status(200).json({
+        message: success === propertiesToInsert.length ? 'Import completed successfully' : 'Import completed with some errors',
+        total: xmlProperties.length,
+        processed: success,
+        errors: errors.length,
+        results: processedReferences.slice(0, success).map(ref => ({ reference: ref, action: 'created' })),
+        errorDetails: errors,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: processingTime
+      });
     } catch (dbError) {
       console.error('Database operation failed:', dbError);
-      
-      // If insert fails due to duplicates, try individual upserts
-      if (dbError instanceof Error && dbError.message.includes('constraint')) {
-        console.log('Falling back to individual property processing...');
-        let successCount = 0;
-        const individualErrors: string[] = [];
-        
-        for (let i = 0; i < propertiesToUpsert.length; i++) {
-          try {
-            // Try update first, then insert if not exists
-            const updated = await storage.updateProperty(parseInt(processedReferences[i]), propertiesToUpsert[i]);
-            if (!updated) {
-              await storage.insertProperties([propertiesToUpsert[i]]);
-            }
-            successCount++;
-          } catch (individualError) {
-            const errorMsg = `${processedReferences[i]}: ${individualError instanceof Error ? individualError.message : 'Unknown error'}`;
-            individualErrors.push(errorMsg);
-          }
-        }
-        
-        const processingTime = Date.now() - startTime;
-        return res.status(200).json({
-          message: 'Import completed with fallback processing',
-          total: xmlProperties.length,
-          processed: successCount,
-          errors: individualErrors.length,
-          processingTimeMs: processingTime,
-          results: processedReferences.slice(0, successCount).map(ref => ({ reference: ref, action: 'processed' })),
-          errorDetails: individualErrors
-        });
-      }
-      
-      throw dbError; // Re-throw if not a constraint error
+      return res.status(500).json({
+        error: 'Failed to insert properties',
+        message: dbError instanceof Error ? dbError.message : 'Database error',
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
+      });
     }
-
-    const processingTime = Date.now() - startTime;
-    const upsertResult = {
-      success: propertiesToUpsert.length,
-      errors: errors
-    };
-    
-    return res.status(200).json({
-      message: upsertResult.errors.length > 0 ? 'Import completed with some errors' : 'Import completed successfully',
-      total: xmlProperties.length,
-      processed: upsertResult.success,
-      errors: upsertResult.errors.length,
-      processingTimeMs: processingTime,
-      results: processedReferences.slice(0, upsertResult.success).map(ref => ({ reference: ref, action: 'upserted' })),
-      errorDetails: upsertResult.errors
-    });
-
   } catch (error) {
     console.error('Import handler error:', error);
     const processingTime = Date.now() - startTime;

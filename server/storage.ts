@@ -4,7 +4,7 @@ import * as schema from "../shared/schema.js";
 import { eq, sql } from "drizzle-orm";
 import * as dotenv from "dotenv";
 
-// Load environment variables from .env file
+// Load environment variables
 dotenv.config();
 
 if (!process.env.DATABASE_URL) {
@@ -15,78 +15,63 @@ if (!process.env.DATABASE_URL) {
 const client = postgres(process.env.DATABASE_URL);
 const db = drizzle(client, { schema });
 
-// StorageInterface defines all CRUD operations for the application
+// StorageInterface defines all CRUD operations
 export interface IStorage {
-
+  getAllPropertyReferences(): Promise<{ reference: string }[]>; // Added method
   upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
     success: number;
     errors: Array<{ reference: string; error: string }>;
   }>;
-
-  // User operations
+  bulkInsertProperties(properties: schema.InsertProperty[], chunkSize?: number): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }>;
   getUser(id: number): Promise<schema.User | undefined>;
   getUserByUsername(username: string): Promise<schema.User | undefined>;
   createUser(user: schema.InsertUser): Promise<schema.User>;
-
-  // Property operations
   getProperties(): Promise<schema.Property[]>;
   getProperty(id: number): Promise<schema.Property | undefined>;
   getPropertyByReference(reference: string): Promise<schema.Property | undefined>;
   createProperty(property: schema.InsertProperty): Promise<schema.Property>;
   updateProperty(id: number, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined>;
+  updatePropertyByReference(reference: string, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined>;
   deleteProperty(id: number): Promise<boolean>;
-
-  // Neighborhood operations
   getNeighborhoods(): Promise<schema.Neighborhood[]>;
   getNeighborhood(id: number): Promise<schema.Neighborhood | undefined>;
   createNeighborhood(neighborhood: schema.InsertNeighborhood): Promise<schema.Neighborhood>;
   updateNeighborhood(id: number, neighborhood: Partial<schema.InsertNeighborhood>): Promise<schema.Neighborhood | undefined>;
   deleteNeighborhood(id: number): Promise<boolean>;
-
-  // Development operations
   getDevelopments(): Promise<schema.Development[]>;
   getDevelopment(id: number): Promise<schema.Development | undefined>;
   createDevelopment(development: schema.InsertDevelopment): Promise<schema.Development>;
   updateDevelopment(id: number, development: Partial<schema.InsertDevelopment>): Promise<schema.Development | undefined>;
   deleteDevelopment(id: number): Promise<boolean>;
-
-  // Enquiry operations
   getEnquiries(): Promise<schema.Enquiry[]>;
   getEnquiry(id: number): Promise<schema.Enquiry | undefined>;
   createEnquiry(enquiry: schema.InsertEnquiry): Promise<schema.Enquiry>;
   updateEnquiry(id: number, enquiry: Partial<schema.Enquiry>): Promise<schema.Enquiry | undefined>;
   deleteEnquiry(id: number): Promise<boolean>;
   markEnquiryAsRead(id: number): Promise<schema.Enquiry | undefined>;
-
-  // Agent operations
   getAgents(): Promise<schema.Agent[]>;
   getAgent(id: number): Promise<schema.Agent | undefined>;
   createAgent(agent: schema.InsertAgent): Promise<schema.Agent>;
   updateAgent(id: number, agent: Partial<schema.InsertAgent>): Promise<schema.Agent | undefined>;
   deleteAgent(id: number): Promise<boolean>;
-
-  // Article operations
   getArticles(): Promise<schema.Article[]>;
   getArticle(id: number): Promise<schema.Article | undefined>;
   createArticle(article: schema.InsertArticle): Promise<schema.Article>;
   updateArticle(id: number, article: Partial<schema.InsertArticle>): Promise<schema.Article | undefined>;
   deleteArticle(id: number): Promise<boolean>;
-
-  // Banner Highlight operations
   getBannerHighlights(): Promise<schema.BannerHighlight[]>;
   getBannerHighlight(id: number): Promise<schema.BannerHighlight | undefined>;
   createBannerHighlight(bannerHighlight: schema.InsertBannerHighlight): Promise<schema.BannerHighlight>;
   updateBannerHighlight(id: number, bannerHighlight: Partial<schema.InsertBannerHighlight>): Promise<schema.BannerHighlight | undefined>;
   deleteBannerHighlight(id: number): Promise<boolean>;
-
-  // Developer operations
   getDevelopers(): Promise<schema.Developer[]>;
   getDeveloper(id: number): Promise<schema.Developer | undefined>;
   createDeveloper(developer: schema.InsertDeveloper): Promise<schema.Developer>;
   updateDeveloper(id: number, developer: Partial<schema.InsertDeveloper>): Promise<schema.Developer | undefined>;
   deleteDeveloper(id: number): Promise<boolean>;
-
-  // Sitemap operations
   getSitemapEntries(): Promise<schema.Sitemap[]>;
   getSitemapEntry(id: number): Promise<schema.Sitemap | undefined>;
   createSitemapEntry(sitemapEntry: schema.InsertSitemap): Promise<schema.Sitemap>;
@@ -95,98 +80,57 @@ export interface IStorage {
 }
 
 export class DbStorage implements IStorage {
-  constructor() {
-    // No in-memory maps needed; database handles persistence
+  constructor() {}
+
+  async getAllPropertyReferences(): Promise<{ reference: string }[]> {
+    try {
+      const result = await db
+        .select({ reference: schema.properties.reference })
+        .from(schema.properties);
+      return result;
+    } catch (error) {
+      console.error('Error fetching property references:', error);
+      throw new Error('Failed to fetch property references');
+    }
   }
 
-  // User methods
-  async getUser(id: number): Promise<schema.User | undefined> {
-    return await db.query.users.findFirst({ where: eq(schema.users.id, id) });
+  async bulkInsertProperties(properties: schema.InsertProperty[], chunkSize: number = 100): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }> {
+    if (properties.length === 0) {
+      return { success: 0, errors: [] };
+    }
+
+    let success = 0;
+    const errors: Array<{ reference: string; error: string }> = [];
+
+    // Process in chunks
+    for (let i = 0; i < properties.length; i += chunkSize) {
+      const chunk = properties.slice(i, i + chunkSize);
+      
+      try {
+        const inserted = await this.insertProperties(chunk);
+        success += inserted.length;
+      } catch (error) {
+        // Fallback to individual inserts for failed chunk
+        for (const property of chunk) {
+          try {
+            await this.createProperty(property);
+            success++;
+          } catch (individualError) {
+            errors.push({
+              reference: property.reference || 'unknown',
+              error: individualError instanceof Error ? individualError.message : 'Unknown error',
+            });
+          }
+        }
+      }
+    }
+
+    return { success, errors };
   }
 
-  async getUserByUsername(username: string): Promise<schema.User | undefined> {
-    return await db.query.users.findFirst({ where: eq(schema.users.username, username) });
-  }
-
-  async createUser(user: schema.InsertUser): Promise<schema.User> {
-    const [newUser] = await db
-      .insert(schema.users)
-      .values({ ...user, createdAt: new Date(), updatedAt: new Date() })
-      .returning();
-    return newUser;
-  }
-
-  // Property methods
-  async getProperties(): Promise<schema.Property[]> {
-    return await db.query.properties.findMany();
-  }
-
-  async getProperty(id: number): Promise<schema.Property | undefined> {
-    console.log('Executing getProperty query for ID:', id, 'with type:', typeof id);
-    const property = await db.query.properties.findFirst({ 
-      where: eq(schema.properties.id, id) 
-    });
-    console.log('Query result for ID', id, ':', property);
-    return property;
-  }
-
-  async getPropertyByReference(reference: string): Promise<schema.Property | undefined> {
-    return await db.query.properties.findFirst({ 
-      where: eq(schema.properties.reference, reference) 
-    });
-  }
-
-  async createProperty(property: schema.InsertProperty): Promise<schema.Property> {
-    const [newProperty] = await db
-      .insert(schema.properties)
-      .values(property)
-      .returning();
-    return newProperty;
-  }
-
-  async updateProperty(id: number, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
-    const [updatedProperty] = await db
-      .update(schema.properties)
-      .set({ ...property, updatedAt: new Date() })
-      .where(eq(schema.properties.id, id))
-      .returning();
-    return updatedProperty;
-  }
-
-  /**
-   * Update property by reference instead of ID
-   */
-  async updatePropertyByReference(reference: string, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
-    const [updatedProperty] = await db
-      .update(schema.properties)
-      .set({ ...property, updatedAt: new Date() })
-      .where(eq(schema.properties.reference, reference))
-      .returning();
-    return updatedProperty;
-  }
-
-  async deleteProperty(id: number): Promise<boolean> {
-    const result = await db.delete(schema.properties).where(eq(schema.properties.id, id));
-    return result.count > 0;
-  }
-
-  /**
-   * Insert multiple properties (will fail if duplicates exist)
-   */
-  async insertProperties(properties: schema.InsertProperty[]): Promise<schema.Property[]> {
-    if (properties.length === 0) return [];
-    
-    const insertedProperties = await db
-      .insert(schema.properties)
-      .values(properties)
-      .returning();
-    
-    return insertedProperties;
-  }
-
-  /**
-   * Safe upsert that handles constraint errors gracefully
-   */
   async upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
     success: number;
     errors: Array<{ reference: string; error: string }>;
@@ -195,21 +139,15 @@ export class DbStorage implements IStorage {
       return { success: 0, errors: [] };
     }
 
-    // First, try the batch upsert (this will work if unique constraint exists)
     try {
       await this.batchUpsertProperties(properties as schema.InsertProperty[]);
       return { success: properties.length, errors: [] };
     } catch (error) {
       console.log('Batch upsert failed, falling back to individual processing:', error);
-      
-      // Fallback to individual upserts
       return await this.individualUpsertProperties(properties);
     }
   }
 
-  /**
-   * Batch upsert - requires unique constraint on reference field
-   */
   private async batchUpsertProperties(properties: schema.InsertProperty[]): Promise<void> {
     await db.insert(schema.properties)
       .values(properties)
@@ -249,9 +187,6 @@ export class DbStorage implements IStorage {
       });
   }
 
-  /**
-   * Individual upsert processing - safer but slower
-   */
   private async individualUpsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
     success: number;
     errors: Array<{ reference: string; error: string }>;
@@ -262,10 +197,7 @@ export class DbStorage implements IStorage {
     for (const property of properties) {
       try {
         if (!property.reference) {
-          errors.push({ 
-            reference: 'unknown', 
-            error: 'Missing reference field' 
-          });
+          errors.push({ reference: 'unknown', error: 'Missing reference field' });
           continue;
         }
 
@@ -274,7 +206,7 @@ export class DbStorage implements IStorage {
       } catch (error) {
         errors.push({
           reference: property.reference || 'unknown',
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
     }
@@ -282,136 +214,88 @@ export class DbStorage implements IStorage {
     return { success, errors };
   }
 
-  /**
-   * Upsert a single property by checking if it exists first
-   */
   async upsertSingleProperty(property: schema.InsertProperty): Promise<schema.Property> {
-    // Try to find existing property
     const existing = await this.getPropertyByReference(property.reference);
-    
     if (existing) {
-      // Update existing property
       const updated = await this.updatePropertyByReference(property.reference, {
         ...property,
         updatedAt: new Date(),
       });
-      
       if (!updated) {
         throw new Error(`Failed to update property with reference: ${property.reference}`);
       }
       return updated;
     } else {
-      // Create new property
       return await this.createProperty(property);
     }
   }
 
-  /**
-   * Bulk insert with better error handling
-   */
-  async bulkInsertProperties(properties: schema.InsertProperty[], chunkSize = 100): Promise<{
-    success: number;
-    errors: Array<{ reference: string; error: string }>;
-  }> {
-    if (properties.length === 0) {
-      return { success: 0, errors: [] };
-    }
-
-    let success = 0;
-    const errors: Array<{ reference: string; error: string }> = [];
-
-    // Process in chunks to avoid memory issues
-    for (let i = 0; i < properties.length; i += chunkSize) {
-      const chunk = properties.slice(i, i + chunkSize);
-      
-      try {
-        await this.insertProperties(chunk);
-        success += chunk.length;
-      } catch (error) {
-        // If chunk fails, try individual inserts
-        for (const property of chunk) {
-          try {
-            await this.createProperty(property);
-            success++;
-          } catch (individualError) {
-            errors.push({
-              reference: property.reference || 'unknown',
-              error: individualError instanceof Error ? individualError.message : 'Unknown error'
-            });
-          }
-        }
-      }
-    }
-
-    return { success, errors };
+  async getUser(id: number): Promise<schema.User | undefined> {
+    return await db.query.users.findFirst({ where: eq(schema.users.id, id) });
   }
 
-  /**
-   * Check if reference constraint exists
-   */
-  async checkReferenceConstraint(): Promise<boolean> {
-    try {
-      // This will attempt to create a constraint violation
-      const testProperty: schema.InsertProperty = {
-        reference: `test-${Date.now()}`,
-        listingType: 'Sale',
-        propertyType: 'Apartment',
-        price: 1000000,
-        currency: 'AED',
-        region: 'Dubai',
-        country: 'UAE',
-        // Add other required fields as needed
-      } as schema.InsertProperty;
-
-      // Insert once
-      await this.createProperty(testProperty);
-      
-      // Try to insert again - should fail if constraint exists
-      try {
-        await this.createProperty(testProperty);
-        // If we get here, no constraint exists
-        return false;
-      } catch (error) {
-        // Constraint exists
-        return true;
-      } finally {
-        // Clean up test property
-        try {
-          await db.delete(schema.properties)
-            .where(eq(schema.properties.reference, testProperty.reference));
-        } catch (cleanupError) {
-          console.warn('Failed to clean up test property:', cleanupError);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking reference constraint:', error);
-      return false;
-    }
+  async getUserByUsername(username: string): Promise<schema.User | undefined> {
+    return await db.query.users.findFirst({ where: eq(schema.users.username, username) });
   }
 
-  /**
-   * Get properties count for monitoring
-   */
-  async getPropertiesCount(): Promise<number> {
-    const result = await db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.properties);
-    
-    return result[0]?.count || 0;
+  async createUser(user: schema.InsertUser): Promise<schema.User> {
+    const [newUser] = await db
+      .insert(schema.users)
+      .values({ ...user, createdAt: new Date(), updatedAt: new Date() })
+      .returning();
+    return newUser;
   }
 
-  /**
-   * Get properties by batch of references (useful for checking what exists)
-   */
-  async getPropertiesByReferences(references: string[]): Promise<schema.Property[]> {
-    if (references.length === 0) return [];
-    
-    return await db.query.properties.findMany({
-      where: sql`${schema.properties.reference} IN ${references}`
+  async getProperties(): Promise<schema.Property[]> {
+    return await db.query.properties.findMany();
+  }
+
+  async getProperty(id: number): Promise<schema.Property | undefined> {
+    console.log('Executing getProperty query for ID:', id, 'with type:', typeof id);
+    const property = await db.query.properties.findFirst({ 
+      where: eq(schema.properties.id, id) 
+    });
+    console.log('Query result for ID', id, ':', property);
+    return property;
+  }
+
+  async getPropertyByReference(reference: string): Promise<schema.Property | undefined> {
+    return await db.query.properties.findFirst({ 
+      where: eq(schema.properties.reference, reference) 
     });
   }
 
-  // Neighborhood methods
+  async createProperty(property: schema.InsertProperty): Promise<schema.Property> {
+    const [newProperty] = await db
+      .insert(schema.properties)
+      .values(property)
+      .returning();
+    return newProperty;
+  }
+
+  async updateProperty(id: number, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
+    const [updatedProperty] = await db
+      .update(schema.properties)
+      .set({ ...property, updatedAt: new Date() })
+      .where(eq(schema.properties.id, id))
+      .returning();
+    return updatedProperty;
+  }
+
+  async updatePropertyByReference(reference: string, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
+    const [updatedProperty] = await db
+      .update(schema.properties)
+      .set({ ...property, updatedAt: new Date() })
+      .where(eq(schema.properties.reference, reference))
+      .returning();
+    return updatedProperty;
+  }
+
+  async deleteProperty(id: number): Promise<boolean> {
+    const result = await db.delete(schema.properties).where(eq(schema.properties.id, id));
+    return result.count > 0;
+  }
+
   async getNeighborhoods(): Promise<schema.Neighborhood[]> {
     return await db.query.neighborhoods.findMany();
   }
@@ -442,7 +326,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Development methods
   async getDevelopments(): Promise<schema.Development[]> {
     return await db.query.developments.findMany();
   }
@@ -473,7 +356,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Enquiry methods
   async getEnquiries(): Promise<schema.Enquiry[]> {
     return await db.query.enquiries.findMany();
   }
@@ -513,7 +395,6 @@ export class DbStorage implements IStorage {
     return updatedEnquiry;
   }
 
-  // Agent methods
   async getAgents(): Promise<schema.Agent[]> {
     return await db.query.agents.findMany();
   }
@@ -544,7 +425,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Article methods
   async getArticles(): Promise<schema.Article[]> {
     return await db.query.articles.findMany();
   }
@@ -575,7 +455,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Banner Highlight methods
   async getBannerHighlights(): Promise<schema.BannerHighlight[]> {
     return await db.query.bannerHighlights.findMany();
   }
@@ -606,7 +485,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Developer methods
   async getDevelopers(): Promise<schema.Developer[]> {
     return await db.query.developers.findMany();
   }
@@ -637,7 +515,6 @@ export class DbStorage implements IStorage {
     return result.count > 0;
   }
 
-  // Sitemap methods
   async getSitemapEntries(): Promise<schema.Sitemap[]> {
     return await db.query.sitemap.findMany();
   }
