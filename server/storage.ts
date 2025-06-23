@@ -1,7 +1,7 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "../shared/schema.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as dotenv from "dotenv";
 
 // Load environment variables from .env file
@@ -18,7 +18,10 @@ const db = drizzle(client, { schema });
 // StorageInterface defines all CRUD operations for the application
 export interface IStorage {
 
-  upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<void>;
+  upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }>;
 
   // User operations
   getUser(id: number): Promise<schema.User | undefined>;
@@ -119,14 +122,18 @@ export class DbStorage implements IStorage {
   }
 
   async getProperty(id: number): Promise<schema.Property | undefined> {
-  console.log('Executing getProperty query for ID:', id, 'with type:', typeof id);
-  const property = await db.query.properties.findFirst({ where: eq(schema.properties.id, id) });
-  console.log('Query result for ID', id, ':', property);
-  return property;
-}
+    console.log('Executing getProperty query for ID:', id, 'with type:', typeof id);
+    const property = await db.query.properties.findFirst({ 
+      where: eq(schema.properties.id, id) 
+    });
+    console.log('Query result for ID', id, ':', property);
+    return property;
+  }
 
   async getPropertyByReference(reference: string): Promise<schema.Property | undefined> {
-    return await db.query.properties.findFirst({ where: eq(schema.properties.reference, reference) });
+    return await db.query.properties.findFirst({ 
+      where: eq(schema.properties.reference, reference) 
+    });
   }
 
   async createProperty(property: schema.InsertProperty): Promise<schema.Property> {
@@ -146,44 +153,261 @@ export class DbStorage implements IStorage {
     return updatedProperty;
   }
 
+  /**
+   * Update property by reference instead of ID
+   */
+  async updatePropertyByReference(reference: string, property: Partial<schema.InsertProperty>): Promise<schema.Property | undefined> {
+    const [updatedProperty] = await db
+      .update(schema.properties)
+      .set({ ...property, updatedAt: new Date() })
+      .where(eq(schema.properties.reference, reference))
+      .returning();
+    return updatedProperty;
+  }
+
   async deleteProperty(id: number): Promise<boolean> {
     const result = await db.delete(schema.properties).where(eq(schema.properties.id, id));
     return result.count > 0;
   }
 
-  async upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<void> {
-    await db.insert(schema.properties).values(properties as schema.InsertProperty[]).onConflictDoUpdate({
-      target: schema.properties.reference,
-      set: {
-        listingType: schema.properties.listingType,
-        propertyType: schema.properties.propertyType,
-        subCommunity: schema.properties.subCommunity,
-        community: schema.properties.community,
-        region: schema.properties.region,
-        country: schema.properties.country,
-        agent: schema.properties.agent,
-        price: schema.properties.price,
-        currency: schema.properties.currency,
-        bedrooms: schema.properties.bedrooms,
-        bathrooms: schema.properties.bathrooms,
-        propertyStatus: schema.properties.propertyStatus,
-        title: schema.properties.title,
-        description: schema.properties.description,
-        sqfeetArea: schema.properties.sqfeetArea,
-        sqfeetBuiltup: schema.properties.sqfeetBuiltup,
-        isExclusive: schema.properties.isExclusive,
-        amenities: schema.properties.amenities,
-        isFeatured: schema.properties.isFeatured,
-        isFitted: schema.properties.isFitted,
-        isFurnished: schema.properties.isFurnished,
-        lifestyle: schema.properties.lifestyle,
-        permit: schema.properties.permit,
-        brochure: schema.properties.brochure,
-        images: schema.properties.images,
-        development: schema.properties.development,
-        neighbourhood: schema.properties.neighbourhood,
-        sold: schema.properties.sold,
-      },
+  /**
+   * Insert multiple properties (will fail if duplicates exist)
+   */
+  async insertProperties(properties: schema.InsertProperty[]): Promise<schema.Property[]> {
+    if (properties.length === 0) return [];
+    
+    const insertedProperties = await db
+      .insert(schema.properties)
+      .values(properties)
+      .returning();
+    
+    return insertedProperties;
+  }
+
+  /**
+   * Safe upsert that handles constraint errors gracefully
+   */
+  async upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }> {
+    if (properties.length === 0) {
+      return { success: 0, errors: [] };
+    }
+
+    // First, try the batch upsert (this will work if unique constraint exists)
+    try {
+      await this.batchUpsertProperties(properties as schema.InsertProperty[]);
+      return { success: properties.length, errors: [] };
+    } catch (error) {
+      console.log('Batch upsert failed, falling back to individual processing:', error);
+      
+      // Fallback to individual upserts
+      return await this.individualUpsertProperties(properties);
+    }
+  }
+
+  /**
+   * Batch upsert - requires unique constraint on reference field
+   */
+  private async batchUpsertProperties(properties: schema.InsertProperty[]): Promise<void> {
+    await db.insert(schema.properties)
+      .values(properties)
+      .onConflictDoUpdate({
+        target: schema.properties.reference,
+        set: {
+          listingType: sql`excluded.listing_type`,
+          propertyType: sql`excluded.property_type`,
+          subCommunity: sql`excluded.sub_community`,
+          community: sql`excluded.community`,
+          region: sql`excluded.region`,
+          country: sql`excluded.country`,
+          agent: sql`excluded.agent`,
+          price: sql`excluded.price`,
+          currency: sql`excluded.currency`,
+          bedrooms: sql`excluded.bedrooms`,
+          bathrooms: sql`excluded.bathrooms`,
+          propertyStatus: sql`excluded.property_status`,
+          title: sql`excluded.title`,
+          description: sql`excluded.description`,
+          sqfeetArea: sql`excluded.sqfeet_area`,
+          sqfeetBuiltup: sql`excluded.sqfeet_builtup`,
+          isExclusive: sql`excluded.is_exclusive`,
+          amenities: sql`excluded.amenities`,
+          isFeatured: sql`excluded.is_featured`,
+          isFitted: sql`excluded.is_fitted`,
+          isFurnished: sql`excluded.is_furnished`,
+          lifestyle: sql`excluded.lifestyle`,
+          permit: sql`excluded.permit`,
+          brochure: sql`excluded.brochure`,
+          images: sql`excluded.images`,
+          development: sql`excluded.development`,
+          neighbourhood: sql`excluded.neighbourhood`,
+          sold: sql`excluded.sold`,
+          updatedAt: sql`NOW()`,
+        },
+      });
+  }
+
+  /**
+   * Individual upsert processing - safer but slower
+   */
+  private async individualUpsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }> {
+    let success = 0;
+    const errors: Array<{ reference: string; error: string }> = [];
+
+    for (const property of properties) {
+      try {
+        if (!property.reference) {
+          errors.push({ 
+            reference: 'unknown', 
+            error: 'Missing reference field' 
+          });
+          continue;
+        }
+
+        await this.upsertSingleProperty(property as schema.InsertProperty);
+        success++;
+      } catch (error) {
+        errors.push({
+          reference: property.reference || 'unknown',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
+    }
+
+    return { success, errors };
+  }
+
+  /**
+   * Upsert a single property by checking if it exists first
+   */
+  async upsertSingleProperty(property: schema.InsertProperty): Promise<schema.Property> {
+    // Try to find existing property
+    const existing = await this.getPropertyByReference(property.reference);
+    
+    if (existing) {
+      // Update existing property
+      const updated = await this.updatePropertyByReference(property.reference, {
+        ...property,
+        updatedAt: new Date(),
+      });
+      
+      if (!updated) {
+        throw new Error(`Failed to update property with reference: ${property.reference}`);
+      }
+      return updated;
+    } else {
+      // Create new property
+      return await this.createProperty(property);
+    }
+  }
+
+  /**
+   * Bulk insert with better error handling
+   */
+  async bulkInsertProperties(properties: schema.InsertProperty[], chunkSize = 100): Promise<{
+    success: number;
+    errors: Array<{ reference: string; error: string }>;
+  }> {
+    if (properties.length === 0) {
+      return { success: 0, errors: [] };
+    }
+
+    let success = 0;
+    const errors: Array<{ reference: string; error: string }> = [];
+
+    // Process in chunks to avoid memory issues
+    for (let i = 0; i < properties.length; i += chunkSize) {
+      const chunk = properties.slice(i, i + chunkSize);
+      
+      try {
+        await this.insertProperties(chunk);
+        success += chunk.length;
+      } catch (error) {
+        // If chunk fails, try individual inserts
+        for (const property of chunk) {
+          try {
+            await this.createProperty(property);
+            success++;
+          } catch (individualError) {
+            errors.push({
+              reference: property.reference || 'unknown',
+              error: individualError instanceof Error ? individualError.message : 'Unknown error'
+            });
+          }
+        }
+      }
+    }
+
+    return { success, errors };
+  }
+
+  /**
+   * Check if reference constraint exists
+   */
+  async checkReferenceConstraint(): Promise<boolean> {
+    try {
+      // This will attempt to create a constraint violation
+      const testProperty: schema.InsertProperty = {
+        reference: `test-${Date.now()}`,
+        listingType: 'Sale',
+        propertyType: 'Apartment',
+        price: 1000000,
+        currency: 'AED',
+        region: 'Dubai',
+        country: 'UAE',
+        // Add other required fields as needed
+      } as schema.InsertProperty;
+
+      // Insert once
+      await this.createProperty(testProperty);
+      
+      // Try to insert again - should fail if constraint exists
+      try {
+        await this.createProperty(testProperty);
+        // If we get here, no constraint exists
+        return false;
+      } catch (error) {
+        // Constraint exists
+        return true;
+      } finally {
+        // Clean up test property
+        try {
+          await db.delete(schema.properties)
+            .where(eq(schema.properties.reference, testProperty.reference));
+        } catch (cleanupError) {
+          console.warn('Failed to clean up test property:', cleanupError);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking reference constraint:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Get properties count for monitoring
+   */
+  async getPropertiesCount(): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.properties);
+    
+    return result[0]?.count || 0;
+  }
+
+  /**
+   * Get properties by batch of references (useful for checking what exists)
+   */
+  async getPropertiesByReferences(references: string[]): Promise<schema.Property[]> {
+    if (references.length === 0) return [];
+    
+    return await db.query.properties.findMany({
+      where: sql`${schema.properties.reference} IN ${references}`
     });
   }
 

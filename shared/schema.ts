@@ -51,8 +51,8 @@ export const properties = pgTable("properties", {
   development: text("development"),
   neighbourhood: text("neighbourhood"),
   sold: boolean("sold").default(false),
-  updatedAt: timestamp("updated_at").defaultNow(),
-  createdAt: timestamp("created_at").defaultNow(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
 export const insertPropertySchema = createInsertSchema(properties).omit({
