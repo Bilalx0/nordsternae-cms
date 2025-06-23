@@ -4,10 +4,11 @@ import { insertAgentSchema } from '../shared/schema.js';
 import { validateBody } from '../server/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('Request method:', req.method, 'Query:', req.query, 'Body:', req.body);
   const id = req.query.id ? parseInt(req.query.id as string) : null;
 
   if (id === null) {
-    // Handle collection operations (no id)
+    // Collection operations
     if (req.method === 'GET') {
       try {
         const agents = await storage.getAgents();
@@ -24,8 +25,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const agent = await storage.createAgent(data);
         res.status(201).json(agent);
-        console.log('Query:', req.query);
-console.log('Body:', req.body);
       } catch (error) {
         res.status(500).json({ message: 'Failed to create agent' });
       }
