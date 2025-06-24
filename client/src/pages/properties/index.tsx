@@ -210,7 +210,7 @@ export default function PropertiesPage() {
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
-      const propertyIds = (properties as PropertyList).map(property => property.id);
+      const propertyIds = (properties as Property[]).map(property => property.id);
       const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
@@ -266,11 +266,8 @@ export default function PropertiesPage() {
 
   // Handle export CSV
   const handleExportCSV = (): void => {
-    let dataToExport = properties as Record<string, any>[];
-    
-    if (isSelectionMode && Object.keys(selectedRows).length > 0) {
-      // Export only selected rows
-      dataToExport = properties.filter((_, index) => selectedRows[index]);
+    if (isSelectionMode) {
+      const dataToExport = properties.filter((_, index) => selectedRows[index]);
       if (dataToExport.length === 0) {
         toast({
           title: "No Rows Selected",
@@ -279,14 +276,20 @@ export default function PropertiesPage() {
         });
         return;
       }
+      const csv = objectsToCSV(dataToExport as Record<string, any>[]);
+      downloadCSV(csv, "selected_properties.csv");
+      toast({
+        title: "Export Successful",
+        description: `Successfully exported ${dataToExport.length} selected properties to CSV.`,
+      });
+    } else {
+      const csv = objectsToCSV(properties as Record<string, any>[]);
+      downloadCSV(csv, "properties.csv");
+      toast({
+        title: "Export Successful",
+        description: `Successfully exported ${properties.length} properties to CSV.`,
+      });
     }
-
-    const csv = objectsToCSV(dataToExport);
-    downloadCSV(csv, "properties.csv");
-    toast({
-      title: "Export Successful",
-      description: `Successfully exported ${dataToExport.length} properties to CSV.`,
-    });
   };
 
   const handleImportCSV = (data: any[]): void => {
