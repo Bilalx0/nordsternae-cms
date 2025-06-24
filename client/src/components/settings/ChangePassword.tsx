@@ -8,9 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/layout/header.jsx";
 import { Sidebar } from "@/components/layout/sidebar.jsx";
+import {DashLayout} from "@/components/layout/dash-layout.jsx";
+import { useLocation } from "wouter";
 
 export default function ChangePassword() {
   const { accessToken } = useContext(AuthContext);
+  const [, setLocation] = useLocation(); // Fixed: properly destructure useLocation
+
   const [formData, setFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -30,7 +34,10 @@ export default function ChangePassword() {
       if (!response.ok) throw new Error(result.error);
       return result;
     },
-    onSuccess: () => toast.success("Password changed successfully"),
+    onSuccess: () => {
+      toast.success("Account password update successfully");
+      setLocation("/login");
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -40,6 +47,10 @@ export default function ChangePassword() {
   };
 
   return (
+    <DashLayout
+      title="Account Management"
+      description="Manage all property listings across your platform"
+    >
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col">
@@ -84,5 +95,6 @@ export default function ChangePassword() {
         </main>
       </div>
     </div>
+    </DashLayout>
   );
 }

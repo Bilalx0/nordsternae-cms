@@ -184,29 +184,6 @@ function SidebarContent({ routes }) {
       <div className="border-t border-neutral-200 p-4">
         {user ? (
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-neutral-200 overflow-hidden">
-              {user.profileImage ? (
-                <img
-                  src={user.profileImage}
-                  alt="Profile"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-full w-full text-neutral-600"
-                >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              )}
-            </div>
             <div className="flex flex-col">
               <p className="text-sm font-medium">{`${user.firstName} ${user.lastName}`}</p>
               <p className="text-xs text-neutral-500">{user.email}</p>

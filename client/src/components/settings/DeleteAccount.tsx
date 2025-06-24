@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/layout/header.jsx";
 import { Sidebar } from "@/components/layout/sidebar.jsx";
+import {DashLayout} from "@/components/layout/dash-layout.jsx";
 
 export default function DeleteAccount() {
   const { accessToken, logout } = useContext(AuthContext);
@@ -47,6 +48,10 @@ export default function DeleteAccount() {
   };
 
   return (
+    <DashLayout
+      title="Account Management"
+      description="Manage all property listings across your platform"
+    >
     <div className="flex min-h-screen">
       <Sidebar />
       <div className="flex-1 flex flex-col">
@@ -79,5 +84,6 @@ export default function DeleteAccount() {
         </main>
       </div>
     </div>
+    </DashLayout>
   );
 }

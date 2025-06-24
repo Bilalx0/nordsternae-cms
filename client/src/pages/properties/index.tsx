@@ -7,15 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock } from "lucide-react";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, Table } from "@tanstack/react-table"; // Import Table type
 import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
 import { CSVUpload } from "@/components/ui/csv-upload";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -74,8 +74,8 @@ export default function PropertiesPage() {
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
-  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
-  
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({}); // Changed name for clarity
+
   // Replace the complex timer logic with simple countdown
   const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60); // 15 minutes in seconds
 
@@ -94,7 +94,7 @@ export default function PropertiesPage() {
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLastImportTime(new Date());
-      
+
       // Reset timer to 15 minutes after successful import
       setTimeRemaining(15 * 60);
 
@@ -261,14 +261,16 @@ export default function PropertiesPage() {
   // Toggle selection mode
   const toggleSelectionMode = (): void => {
     setIsSelectionMode(!isSelectionMode);
-    setSelectedRows({}); // Reset selected rows when toggling mode
+    setSelectedRowIds({}); // Reset selected rows when toggling mode
   };
 
   // Handle export CSV
   const handleExportCSV = (): void => {
+    // Get selected rows from the DataTable's internal state
+    const selectedData = properties.filter(property => selectedRowIds[property.id]);
+
     if (isSelectionMode) {
-      const dataToExport = properties.filter((_, index) => selectedRows[index]);
-      if (dataToExport.length === 0) {
+      if (selectedData.length === 0) {
         toast({
           title: "No Rows Selected",
           description: "Please select at least one property to export.",
@@ -276,11 +278,11 @@ export default function PropertiesPage() {
         });
         return;
       }
-      const csv = objectsToCSV(dataToExport as Record<string, any>[]);
+      const csv = objectsToCSV(selectedData as Record<string, any>[]);
       downloadCSV(csv, "selected_properties.csv");
       toast({
         title: "Export Successful",
-        description: `Successfully exported ${dataToExport.length} selected properties to CSV.`,
+        description: `Successfully exported ${selectedData.length} selected properties to CSV.`,
       });
     } else {
       const csv = objectsToCSV(properties as Record<string, any>[]);
@@ -291,6 +293,7 @@ export default function PropertiesPage() {
       });
     }
   };
+
 
   const handleImportCSV = (data: any[]): void => {
     toast({
@@ -375,11 +378,11 @@ export default function PropertiesPage() {
       cell: ({ row }) => {
         const status = row.original.propertyStatus;
         let badgeVariant: "default" | "secondary" | "destructive" | "outline" = "outline";
-        
+
         if (status === "Off Plan") badgeVariant = "secondary";
         else if (status === "Ready") badgeVariant = "default";
         else if (status === "Sold") badgeVariant = "destructive";
-        
+
         return (
           <Badge variant={badgeVariant}>
             {status}
@@ -396,9 +399,9 @@ export default function PropertiesPage() {
         if (!agent || (Array.isArray(agent) && agent.length === 0)) {
           return <div className="text-muted-foreground">Unassigned</div>;
         }
-        
+
         const agentName = Array.isArray(agent) ? agent[0]?.name : agent.name;
-        
+
         return (
           <div className="flex items-center">
             <div className="flex-shrink-0 h-8 w-8 rounded-full bg-neutral-200 flex items-center justify-center text-neutral-600">
@@ -451,7 +454,7 @@ export default function PropertiesPage() {
                 Last import: {lastImportTime.toLocaleTimeString()}
               </span>
             )}
-            
+
             {isImporting ? (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
@@ -467,14 +470,14 @@ export default function PropertiesPage() {
             )}
           </div>
         </div>
-        
+
         {/* Progress bar */}
         <div className="mt-3">
           <div className="w-full bg-blue-200 rounded-full h-1.5">
-            <div 
+            <div
               className="bg-blue-600 h-1.5 rounded-full transition-all duration-1000 ease-linear"
-              style={{ 
-                width: `${((15 * 60 - timeRemaining) / (15 * 60)) * 100}%` 
+              style={{
+                width: `${((15 * 60 - timeRemaining) / (15 * 60)) * 100}%`
               }}
             ></div>
           </div>
@@ -483,15 +486,15 @@ export default function PropertiesPage() {
 
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div className="mt-4 md:mt-0 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-          <Button 
+          <Button
             onClick={() => setLocation("/properties/new")}
             className="flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
             Add Property
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleManualImport}
             className="flex items-center gap-2"
             disabled={isImporting}
@@ -499,15 +502,15 @@ export default function PropertiesPage() {
             <Download className={`h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
             {isImporting ? "Importing..." : "Import Now"}
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleExportCSV}
             className="flex items-center gap-2"
           >
             <FileDown className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button 
+          <Button
             variant="outline"
             onClick={() => setIsImportDialogOpen(true)}
             className="flex items-center gap-2"
@@ -515,7 +518,7 @@ export default function PropertiesPage() {
             <FileUp className="h-4 w-4" />
             Import CSV
           </Button>
-          <Button 
+          <Button
             variant="outline"
             onClick={handleRefresh}
             className="flex items-center gap-2"
@@ -524,7 +527,7 @@ export default function PropertiesPage() {
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
-          <Button 
+          <Button
             variant="destructive"
             onClick={handleDeleteAll}
             className="flex items-center gap-2"
@@ -533,7 +536,7 @@ export default function PropertiesPage() {
             <Trash2 className="h-4 w-4" />
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
           </Button>
-          <Button 
+          <Button
             variant={isSelectionMode ? "default" : "outline"}
             onClick={toggleSelectionMode}
             className="flex items-center gap-2"
@@ -559,8 +562,8 @@ export default function PropertiesPage() {
         ]}
         deleteRow={(row: Property) => handleDelete(row.id)}
         editRow={(row: Property) => setLocation(`/properties/${row.id}`)}
-        rowSelection={isSelectionMode ? selectedRows : {}}
-        setRowSelection={isSelectionMode ? setSelectedRows : undefined}
+        rowSelection={selectedRowIds} // Pass selectedRowIds
+        setRowSelection={setSelectedRowIds} // Pass setSelectedRowIds
       />
 
       {/* Import CSV Dialog */}
@@ -618,7 +621,7 @@ export default function PropertiesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDeleteAll}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={deleteAllPropertiesMutation.isPending}

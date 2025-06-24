@@ -85,13 +85,7 @@ export function Header({ onSearch }: HeaderProps) {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
-                <Link href="/settings/profile">Profile</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
                 <Link href="/settings/change-password">Change Password</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link href="/settings/upload-image">Upload Profile Image</Link>
               </DropdownMenuItem>
               <DropdownMenuItem className="text-red-600">
                 <Link href="/settings/delete-account">Delete Account</Link>
