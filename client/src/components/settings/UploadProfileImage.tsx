@@ -21,6 +21,7 @@ export default function UploadProfileImage() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "multipart/form-data",
         },
         body: formData,
       });

@@ -73,10 +73,6 @@ export function Header({ onSearch }: HeaderProps) {
       </form>
 
       <div className="flex items-center gap-2">
-        <Button variant="ghost" size="icon" className="hidden md:flex">
-          <Bell className="h-5 w-5" />
-          <span className="sr-only">Notifications</span>
-        </Button>
         {user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
