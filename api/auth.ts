@@ -43,6 +43,12 @@ interface ServerlessResponse {
   body: string;
 }
 
+export const config = {
+  api: {
+    bodyParser: false, // Ensure raw body is available for multipart processing
+  },
+};
+
 // Environment variables validation
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key';
 const REFRESH_SECRET = process.env.REFRESH_SECRET || 'your-super-secret-refresh-key';
