@@ -8,14 +8,14 @@ import {
   getSortedRowModel,
   SortingState,
   getFilteredRowModel,
-  FilterFn,
   ColumnFiltersState,
+  RowSelectionState, // Import RowSelectionState
 } from "@tanstack/react-table";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { DataTablePagination } from "./data-table-pagination";
 import { DataTableToolbar } from "./data-table-toolbar";
-import { Filter } from "@/types";
+import { Filter } from "@/types"; // Ensure this type is correctly defined elsewhere if used
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -34,6 +34,10 @@ interface DataTableProps<TData, TValue> {
   onRowClick?: (row: TData) => void;
   deleteRow?: (row: TData) => void;
   editRow?: (row: TData) => void;
+  // --- ADDED FOR ROW SELECTION ---
+  rowSelection?: RowSelectionState; // Optional, but expected from parent for controlled selection
+  setRowSelection?: React.Dispatch<React.SetStateAction<RowSelectionState>>; // Setter for parent's selection state
+  // ------------------------------
 }
 
 export function DataTable<TData, TValue>({
@@ -46,6 +50,10 @@ export function DataTable<TData, TValue>({
   onRowClick,
   deleteRow,
   editRow,
+  // --- DESTUCTURE ADDED PROPS ---
+  rowSelection,
+  setRowSelection,
+  // -----------------------------
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(
     defaultSort ? [{ id: defaultSort.id, desc: defaultSort.desc }] : []
@@ -53,9 +61,12 @@ export function DataTable<TData, TValue>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [globalFilter, setGlobalFilter] = React.useState("");
 
+  // Memoize columns to prevent unnecessary re-renders
+  const memoizedColumns = React.useMemo(() => columns, [columns]);
+
   const table = useReactTable({
     data,
-    columns,
+    columns: memoizedColumns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
     onSortingChange: setSorting,
@@ -63,11 +74,22 @@ export function DataTable<TData, TValue>({
     onColumnFiltersChange: setColumnFilters,
     getFilteredRowModel: getFilteredRowModel(),
     onGlobalFilterChange: setGlobalFilter,
+    // --- CRITICAL CONFIGURATION FOR ROW SELECTION ---
+    enableRowSelection: true, // This enables row selection features
+    // If rowSelection and setRowSelection are provided, use them to control the selection state
+    ...(setRowSelection && { onRowSelectionChange: setRowSelection }),
+    // Pass the rowSelection state down from the parent
     state: {
       sorting,
       columnFilters,
       globalFilter,
+      ...(rowSelection && { rowSelection }), // Include rowSelection in state if provided
     },
+    // --- THIS IS THE MOST IMPORTANT PART ---
+    // It tells @tanstack/react-table which property to use as the unique ID for each row.
+    // This 'id' will then be the key in the `rowSelection` object.
+    // Assuming TData (your Property interface) has an 'id' property.
+    getRowId: (row: TData) => (row as any).id.toString(), // Ensure your data objects have an 'id'
   });
 
   return (
