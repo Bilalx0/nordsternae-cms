@@ -10,7 +10,7 @@ import { Link } from "wouter";
 
 export default function Login() {
   const { login } = useContext(AuthContext);
-  const navigate = useLocation();
+  const [, setLocation] = useLocation(); // Fixed: properly destructure useLocation
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -20,7 +20,7 @@ export default function Login() {
     e.preventDefault();
     try {
       await login(formData.email, formData.password);
-      navigate("/");
+      setLocation("/"); // Fixed: use setLocation instead of navigate
     } catch (error) {
       // Error handled by AuthContext
     }

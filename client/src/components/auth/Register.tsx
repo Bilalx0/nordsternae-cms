@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function Register() {
-  const { login } = useContext(AuthContext) as { login: (email: string, password: string) => Promise<void> }; // Use login to auto-login after register
-  const [, navigate] = useLocation();
+  const { login } = useContext(AuthContext) as { login: (email: string, password: string) => Promise<void> };
+  const [, setLocation] = useLocation(); // Fixed: use setLocation instead of navigate
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -28,9 +28,10 @@ export default function Register() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
+      
       await login(formData.email, formData.password); // Auto-login after register
       toast.success("Registration successful");
-      navigate("/");
+      setLocation("/"); // Fixed: use setLocation instead of navigate
     } catch (error) {
       toast.error(error.message);
     }
