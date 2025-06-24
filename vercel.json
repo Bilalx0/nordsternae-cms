@@ -39,5 +39,11 @@
     { "src": "/properties/[^/]+", "dest": "/client/dist/index.html" },
     
     { "src": "/(.*)", "dest": "/client/dist/index.html" }
-  ]
+  ],
+  "functions": {
+    "api/auth.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
 }

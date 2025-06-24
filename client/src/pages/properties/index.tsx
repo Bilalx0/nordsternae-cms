@@ -73,6 +73,8 @@ export default function PropertiesPage() {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
+  const [selectedRows, setSelectedRows] = useState<Record<string, boolean>>({});
   
   // Replace the complex timer logic with simple countdown
   const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60); // 15 minutes in seconds
@@ -208,7 +210,7 @@ export default function PropertiesPage() {
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
-      const propertyIds = (properties as Property[]).map(property => property.id);
+      const propertyIds = (properties as PropertyList).map(property => property.id);
       const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
@@ -256,12 +258,34 @@ export default function PropertiesPage() {
     deleteAllPropertiesMutation.mutate();
   };
 
+  // Toggle selection mode
+  const toggleSelectionMode = (): void => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedRows({}); // Reset selected rows when toggling mode
+  };
+
+  // Handle export CSV
   const handleExportCSV = (): void => {
-    const csv = objectsToCSV(properties as Record<string, any>[]);
+    let dataToExport = properties as Record<string, any>[];
+    
+    if (isSelectionMode && Object.keys(selectedRows).length > 0) {
+      // Export only selected rows
+      dataToExport = properties.filter((_, index) => selectedRows[index]);
+      if (dataToExport.length === 0) {
+        toast({
+          title: "No Rows Selected",
+          description: "Please select at least one property to export.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const csv = objectsToCSV(dataToExport);
     downloadCSV(csv, "properties.csv");
     toast({
       title: "Export Successful",
-      description: "Properties have been exported to CSV.",
+      description: `Successfully exported ${dataToExport.length} properties to CSV.`,
     });
   };
 
@@ -275,6 +299,29 @@ export default function PropertiesPage() {
   };
 
   const propertyColumns: ColumnDef<Property>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          disabled={!isSelectionMode}
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          disabled={!isSelectionMode}
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       id: "reference",
       header: "Reference",
@@ -483,6 +530,13 @@ export default function PropertiesPage() {
             <Trash2 className="h-4 w-4" />
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
           </Button>
+          <Button 
+            variant={isSelectionMode ? "default" : "outline"}
+            onClick={toggleSelectionMode}
+            className="flex items-center gap-2"
+          >
+            {isSelectionMode ? "Cancel Selection" : "Select Rows"}
+          </Button>
         </div>
       </div>
 
@@ -502,6 +556,8 @@ export default function PropertiesPage() {
         ]}
         deleteRow={(row: Property) => handleDelete(row.id)}
         editRow={(row: Property) => setLocation(`/properties/${row.id}`)}
+        rowSelection={isSelectionMode ? selectedRows : {}}
+        setRowSelection={isSelectionMode ? setSelectedRows : undefined}
       />
 
       {/* Import CSV Dialog */}

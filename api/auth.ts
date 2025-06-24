@@ -2,6 +2,8 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { IncomingForm } from 'formidable';
+import { promisify } from 'util';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
 import { users, refreshTokens } from '../shared/schema.js'; // Assuming your schema exports these tables
@@ -85,9 +87,10 @@ const comparePassword = async (password: string, hash: string): Promise<boolean>
   return bcrypt.compare(password, hash);
 };
 
-const uploadToCloudinary = (buffer: Buffer, folder: string = 'profile-images'): Promise<any> => {
+const uploadToCloudinary = (filePath: string, folder: string = 'profile-images'): Promise<any> => {
   return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
+    cloudinary.uploader.upload(
+      filePath,
       {
         folder,
         transformation: [
@@ -100,11 +103,18 @@ const uploadToCloudinary = (buffer: Buffer, folder: string = 'profile-images'): 
         else resolve(result);
       }
     );
-    
-    const readable = Readable.from(buffer);
-    readable.pipe(stream);
   });
 };
+
+const parseForm = promisify<ServerlessRequest, { fields: Record<string, any>, files: Record<string, any> }>(
+  (req, cb) => {
+    const form = new IncomingForm({ maxFileSize: 5 * 1024 * 1024 }); // 5MB limit
+    form.parse(req, (err: Error | null, fields: any, files: any) => {
+      if (err) return cb(err);
+      cb(null, { fields, files });
+    });
+  }
+);
 
 const validateEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -142,45 +152,72 @@ const createResponse = (statusCode: number, data: any, headers: Record<string, s
   };
 };
 
-// Parse multipart form data for file uploads
-const parseMultipartData = (body: string, contentType: string): { fields: Record<string, any>, files: Record<string, any> } => {
-  const boundary = contentType.split('boundary=')[1];
-  if (!boundary) return { fields: {}, files: {} };
-
-  const parts = body.split(`--${boundary}`);
+// Fixed multipart parser for Vercel
+const parseMultipartData = (body: Buffer | string, boundary: string): { fields: Record<string, any>, files: Record<string, any> } => {
+  const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(body, 'binary');
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  
   const fields: Record<string, any> = {};
   const files: Record<string, any> = {};
-
+  
+  // Split by boundary
+  const parts = [];
+  let start = 0;
+  let boundaryIndex = bodyBuffer.indexOf(boundaryBuffer, start);
+  
+  while (boundaryIndex !== -1) {
+    if (start !== boundaryIndex) {
+      parts.push(bodyBuffer.slice(start, boundaryIndex));
+    }
+    start = boundaryIndex + boundaryBuffer.length;
+    boundaryIndex = bodyBuffer.indexOf(boundaryBuffer, start);
+  }
+  
+  // Add the last part
+  if (start < bodyBuffer.length) {
+    parts.push(bodyBuffer.slice(start));
+  }
+  
   parts.forEach(part => {
-    if (part.includes('Content-Disposition')) {
-      const lines = part.split('\r\n');
-      const dispositionLine = lines.find(line => line.includes('Content-Disposition'));
+    if (part.length < 4) return;
+    
+    const partStr = part.toString('binary');
+    const headerEndIndex = partStr.indexOf('\r\n\r\n');
+    
+    if (headerEndIndex === -1) return;
+    
+    const headers = partStr.substring(0, headerEndIndex);
+    const contentStartIndex = headerEndIndex + 4;
+    
+    const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
+    
+    if (dispositionMatch) {
+      const fieldName = dispositionMatch[1];
+      const filename = dispositionMatch[2];
       
-      if (dispositionLine) {
-        const nameMatch = dispositionLine.match(/name="([^"]+)"/);
-        const filenameMatch = dispositionLine.match(/filename="([^"]+)"/);
+      if (filename) {
+        // This is a file
+        const contentTypeMatch = headers.match(/Content-Type:\s*(.+)/i);
+        const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
         
-        if (nameMatch) {
-          const fieldName = nameMatch[1];
-          const contentStartIndex = part.indexOf('\r\n\r\n') + 4;
-          const content = part.substring(contentStartIndex).replace(/\r\n$/, '');
-          
-          if (filenameMatch) {
-            const contentTypeMatch = part.match(/Content-Type: (.+)/);
-            files[fieldName] = {
-              buffer: Buffer.from(content, 'binary'),
-              mimetype: contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream',
-              originalname: filenameMatch[1],
-              size: Buffer.byteLength(content, 'binary')
-            };
-          } else {
-            fields[fieldName] = content;
-          }
-        }
+        const fileBuffer = part.slice(contentStartIndex);
+        // Remove trailing \r\n-- if present
+        const cleanBuffer = fileBuffer.slice(0, fileBuffer.length - 2);
+        
+        files[fieldName] = {
+          buffer: cleanBuffer,
+          mimetype: contentType,
+          originalname: filename,
+          size: cleanBuffer.length
+        };
+      } else {
+        // This is a regular field
+        const content = part.slice(contentStartIndex).toString('utf8').replace(/\r\n$/, '');
+        fields[fieldName] = content;
       }
     }
   });
-
+  
   return { fields, files };
 };
 
@@ -499,26 +536,25 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
     }
 
     const contentType = req.headers['content-type'] || req.headers['Content-Type'];
-    
     if (!contentType?.includes('multipart/form-data')) {
       return createResponse(400, { error: 'Content-Type must be multipart/form-data' });
     }
 
-    const bodyString = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
-    const { fields, files } = parseMultipartData(bodyString, contentType);
+    // Parse form data using formidable
+    const { fields, files } = await parseForm(req);
 
-    if (!files.profileImage) {
-      return createResponse(400, { error: 'No image file provided' });
+    // Check if profileImage file exists
+    const file = files.profileImage;
+    if (!file || Array.isArray(file)) {
+      return createResponse(400, { error: 'No valid image file provided' });
     }
 
-    const file = files.profileImage;
-
     // Validate file type
-    if (!file.mimetype.startsWith('image/')) {
+    if (!file.mimetype?.startsWith('image/')) {
       return createResponse(400, { error: 'Only image files are allowed' });
     }
 
-    // Validate file size (5MB limit)
+    // Validate file size (redundant since formidable enforces maxFileSize, but good practice)
     if (file.size > 5 * 1024 * 1024) {
       return createResponse(400, { error: 'File size must be less than 5MB' });
     }
@@ -526,7 +562,7 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
     const userId = auth.user!.id;
 
     // Upload to Cloudinary
-    const cloudinaryResult = await uploadToCloudinary(file.buffer);
+    const cloudinaryResult = await uploadToCloudinary(file.filepath);
 
     // Update user profile with new image URL
     const updatedUser = await db.update(users)
@@ -544,11 +580,20 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
       user: userResponse,
       imageUrl: cloudinaryResult.secure_url
     });
-  } catch (error) {
-    console.error('Profile image upload error:', error);
-    return createResponse(500, { error: 'Failed to upload profile image' });
+  } catch (error: any) {
+    console.error('Profile image upload error:', {
+      message: error.message,
+      stack: error.stack,
+      cloudinaryConfig: {
+        cloud_name: CLOUDINARY_CLOUD_NAME,
+        api_key: CLOUDINARY_API_KEY ? 'configured' : 'missing',
+        api_secret: CLOUDINARY_API_SECRET ? 'configured' : 'missing'
+      }
+    });
+    return createResponse(500, { error: 'Failed to upload profile image', details: error.message });
   }
 };
+
 
 export const changePassword = async (req: ServerlessRequest): Promise<ServerlessResponse> => {
   try {
@@ -655,9 +700,7 @@ export {
   parseMultipartData
 };
 
-// Example usage for different serverless platforms:
-
-// Main Vercel handler for auth.ts
+// Main Vercel handler
 export default async function handler(req: any, res: any) {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -667,10 +710,23 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
+  // For multipart form data, we need to handle it differently
+  let body = req.body;
+  
+  // If it's a multipart request, convert to buffer
+  if (req.headers['content-type']?.includes('multipart/form-data')) {
+    if (typeof req.body === 'string') {
+      body = Buffer.from(req.body, 'binary');
+    } else if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      // If it's already parsed by Vercel, handle accordingly
+      body = req.body;
+    }
+  }
+
   const request: ServerlessRequest = {
     method: req.method,
     headers: req.headers,
-    body: req.body,
+    body: body,
     query: req.query,
     url: req.url
   };
