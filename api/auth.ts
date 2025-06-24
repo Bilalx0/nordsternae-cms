@@ -1,11 +1,9 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { IncomingForm } from 'formidable';
 import { promisify } from 'util';
 import { v2 as cloudinary } from 'cloudinary';
-import { Readable } from 'stream';
+import { Readable } from 'stream'; // Import Readable for stream conversion
 import { users, refreshTokens } from '../shared/schema.js'; // Assuming your schema exports these tables
 import { db } from '../server/storage.js'; // Assuming your db connection is here
 
@@ -30,16 +28,13 @@ interface AuthTokens {
 interface ServerlessRequest {
   method: string;
   headers: Record<string, string>;
-  body: string | any;
+  body: string | any; // For non-multipart bodies
   query: Record<string, string>;
   url?: string;
   user?: User;
-  file?: {
-    buffer: Buffer;
-    mimetype: string;
-    size: number;
-    originalname: string;
-  };
+  // New properties for multipart handling
+  rawBody?: Buffer; // The raw request body buffer for multipart
+  boundary?: string; // The boundary string for multipart
 }
 
 interface ServerlessResponse {
@@ -87,34 +82,7 @@ const comparePassword = async (password: string, hash: string): Promise<boolean>
   return bcrypt.compare(password, hash);
 };
 
-const uploadToCloudinary = (filePath: string, folder: string = 'profile-images'): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload(
-      filePath,
-      {
-        folder,
-        transformation: [
-          { width: 300, height: 300, crop: 'fill', gravity: 'face' },
-          { quality: 'auto', fetch_format: 'auto' }
-        ]
-      },
-      (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      }
-    );
-  });
-};
-
-const parseForm = promisify<ServerlessRequest, { fields: Record<string, any>, files: Record<string, any> }>(
-  (req, cb) => {
-    const form = new IncomingForm({ maxFileSize: 5 * 1024 * 1024 }); // 5MB limit
-    form.parse(req, (err: Error | null, fields: any, files: any) => {
-      if (err) return cb(err);
-      cb(null, { fields, files });
-    });
-  }
-);
+// Removed uploadToCloudinary that accepted filePath, now using streams
 
 const validateEmail = (email: string): boolean => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -152,58 +120,41 @@ const createResponse = (statusCode: number, data: any, headers: Record<string, s
   };
 };
 
-// Fixed multipart parser for Vercel
-const parseMultipartData = (body: Buffer | string, boundary: string): { fields: Record<string, any>, files: Record<string, any> } => {
-  const bodyBuffer = Buffer.isBuffer(body) ? body : Buffer.from(body, 'binary');
+// Fixed multipart parser for Vercel, adjusted to work with Buffer input primarily
+const parseMultipartData = (body: Buffer, boundary: string): { fields: Record<string, any>, files: Record<string, any> } => {
   const boundaryBuffer = Buffer.from(`--${boundary}`);
-  
   const fields: Record<string, any> = {};
   const files: Record<string, any> = {};
-  
-  // Split by boundary
-  const parts = [];
-  let start = 0;
-  let boundaryIndex = bodyBuffer.indexOf(boundaryBuffer, start);
-  
-  while (boundaryIndex !== -1) {
-    if (start !== boundaryIndex) {
-      parts.push(bodyBuffer.slice(start, boundaryIndex));
-    }
-    start = boundaryIndex + boundaryBuffer.length;
-    boundaryIndex = bodyBuffer.indexOf(boundaryBuffer, start);
-  }
-  
-  // Add the last part
-  if (start < bodyBuffer.length) {
-    parts.push(bodyBuffer.slice(start));
-  }
-  
-  parts.forEach(part => {
-    if (part.length < 4) return;
-    
-    const partStr = part.toString('binary');
-    const headerEndIndex = partStr.indexOf('\r\n\r\n');
-    
+
+  // Split by boundary, handling potential trailing --\r\n-- or --\r\n
+  const parts = body.toString('binary').split(`--${boundary}`);
+
+  parts.forEach(partStr => {
+    // Skip empty parts and the last trailing boundary marker
+    if (!partStr.trim() || partStr.endsWith('--\r\n')) return;
+
+    const partBuffer = Buffer.from(partStr, 'binary');
+    const headerEndIndex = partBuffer.indexOf('\r\n\r\n');
+
     if (headerEndIndex === -1) return;
-    
-    const headers = partStr.substring(0, headerEndIndex);
-    const contentStartIndex = headerEndIndex + 4;
-    
-    const dispositionMatch = headers.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
-    
+
+    const headersStr = partBuffer.slice(0, headerEndIndex).toString('utf8');
+    const contentBuffer = partBuffer.slice(headerEndIndex + 4); // +4 for \r\n\r\n
+
+    const dispositionMatch = headersStr.match(/Content-Disposition:\s*form-data;\s*name="([^"]+)"(?:;\s*filename="([^"]+)")?/i);
+
     if (dispositionMatch) {
       const fieldName = dispositionMatch[1];
       const filename = dispositionMatch[2];
-      
+
       if (filename) {
         // This is a file
-        const contentTypeMatch = headers.match(/Content-Type:\s*(.+)/i);
+        const contentTypeMatch = headersStr.match(/Content-Type:\s*(.+)/i);
         const contentType = contentTypeMatch ? contentTypeMatch[1].trim() : 'application/octet-stream';
-        
-        const fileBuffer = part.slice(contentStartIndex);
-        // Remove trailing \r\n-- if present
-        const cleanBuffer = fileBuffer.slice(0, fileBuffer.length - 2);
-        
+
+        // Remove trailing \r\n from contentBuffer (each part ends with \r\n)
+        const cleanBuffer = contentBuffer.slice(0, contentBuffer.length - 2);
+
         files[fieldName] = {
           buffer: cleanBuffer,
           mimetype: contentType,
@@ -212,12 +163,13 @@ const parseMultipartData = (body: Buffer | string, boundary: string): { fields: 
         };
       } else {
         // This is a regular field
-        const content = part.slice(contentStartIndex).toString('utf8').replace(/\r\n$/, '');
+        // Remove trailing \r\n from contentBuffer
+        const content = contentBuffer.slice(0, contentBuffer.length - 2).toString('utf8');
         fields[fieldName] = content;
       }
     }
   });
-  
+
   return { fields, files };
 };
 
@@ -232,19 +184,20 @@ const authenticateToken = async (req: ServerlessRequest): Promise<{ success: boo
     }
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
+
     if (decoded.type !== 'access') {
       return { success: false, error: 'Invalid token type' };
     }
 
     const user = await db.select().from(users).where(eq(users.id, decoded.userId)).limit(1);
-    
+
     if (!user.length) {
       return { success: false, error: 'User not found' };
     }
 
     return { success: true, user: user[0] };
   } catch (error) {
+    console.error("Authenticate token error:", error);
     return { success: false, error: 'Invalid or expired token' };
   }
 };
@@ -275,7 +228,7 @@ export const register = async (req: ServerlessRequest): Promise<ServerlessRespon
 
     // Check if user exists
     const existingUser = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
-    
+
     if (existingUser.length > 0) {
       return createResponse(409, { error: 'User already exists with this email' });
     }
@@ -333,14 +286,14 @@ export const login = async (req: ServerlessRequest): Promise<ServerlessResponse>
 
     // Find user
     const user = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
-    
+
     if (!user.length) {
       return createResponse(401, { error: 'Invalid credentials' });
     }
 
     // Verify password
     const isValidPassword = await comparePassword(password, user[0].password);
-    
+
     if (!isValidPassword) {
       return createResponse(401, { error: 'Invalid credentials' });
     }
@@ -384,7 +337,7 @@ export const refreshToken = async (req: ServerlessRequest): Promise<ServerlessRe
 
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, REFRESH_SECRET) as any;
-    
+
     if (decoded.type !== 'refresh') {
       return createResponse(401, { error: 'Invalid token type' });
     }
@@ -493,17 +446,17 @@ export const updateProfile = async (req: ServerlessRequest): Promise<ServerlessR
       if (!validateEmail(email)) {
         return createResponse(400, { error: 'Invalid email format' });
       }
-      
+
       // Check if email is already taken by another user
       const existingUser = await db.select()
         .from(users)
         .where(eq(users.email, email.toLowerCase()))
         .limit(1);
-      
+
       if (existingUser.length > 0 && existingUser[0].id !== userId) {
         return createResponse(409, { error: 'Email already taken' });
       }
-      
+
       updateData.email = email.toLowerCase();
     }
 
@@ -540,13 +493,19 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
       return createResponse(400, { error: 'Content-Type must be multipart/form-data' });
     }
 
-    // Parse form data using formidable
-    const { fields, files } = await parseForm(req);
+    // Ensure rawBody and boundary are present from the main handler
+    if (!req.rawBody || !req.boundary) {
+      console.error('Missing rawBody or boundary in request for multipart/form-data.');
+      return createResponse(400, { error: 'Missing raw request body or multipart boundary. This is an internal server configuration issue.' });
+    }
+
+    // Parse form data using the custom parseMultipartData function
+    const { files } = parseMultipartData(req.rawBody, req.boundary);
 
     // Check if profileImage file exists
     const file = files.profileImage;
-    if (!file || Array.isArray(file)) {
-      return createResponse(400, { error: 'No valid image file provided' });
+    if (!file || !file.buffer) { // Ensure buffer exists
+      return createResponse(400, { error: 'No valid image file provided or file buffer missing' });
     }
 
     // Validate file type
@@ -554,15 +513,36 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
       return createResponse(400, { error: 'Only image files are allowed' });
     }
 
-    // Validate file size (redundant since formidable enforces maxFileSize, but good practice)
-    if (file.size > 5 * 1024 * 1024) {
-      return createResponse(400, { error: 'File size must be less than 5MB' });
+    // Validate file size (redundant if client-side compression and limit are good, but good practice)
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit
+    if (file.size > MAX_FILE_SIZE) {
+      return createResponse(400, { error: `File size must be less than ${MAX_FILE_SIZE / (1024 * 1024)}MB` });
     }
 
     const userId = auth.user!.id;
 
-    // Upload to Cloudinary
-    const cloudinaryResult = await uploadToCloudinary(file.filepath);
+    // Convert buffer to Readable stream for Cloudinary upload
+    const stream = new Readable();
+    stream.push(file.buffer);
+    stream.push(null); // Mark end of stream
+
+    // Upload to Cloudinary using stream
+    const cloudinaryResult: any = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'profile-images', // Define your Cloudinary folder
+          transformation: [
+            { width: 300, height: 300, crop: 'fill', gravity: 'face' },
+            { quality: 'auto', fetch_format: 'auto' }
+          ]
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      stream.pipe(uploadStream);
+    });
 
     // Update user profile with new image URL
     const updatedUser = await db.update(users)
@@ -590,6 +570,7 @@ export const uploadProfileImage = async (req: ServerlessRequest): Promise<Server
         api_secret: CLOUDINARY_API_SECRET ? 'configured' : 'missing'
       }
     });
+    // Ensure the error response is always JSON
     return createResponse(500, { error: 'Failed to upload profile image', details: error.message });
   }
 };
@@ -622,7 +603,7 @@ export const changePassword = async (req: ServerlessRequest): Promise<Serverless
 
     // Verify current password
     const isValidPassword = await comparePassword(currentPassword, auth.user!.password);
-    
+
     if (!isValidPassword) {
       return createResponse(401, { error: 'Current password is incorrect' });
     }
@@ -669,7 +650,7 @@ export const deleteAccount = async (req: ServerlessRequest): Promise<ServerlessR
 
     // Verify password
     const isValidPassword = await comparePassword(password, auth.user!.password);
-    
+
     if (!isValidPassword) {
       return createResponse(401, { error: 'Incorrect password' });
     }
@@ -695,9 +676,8 @@ export {
   comparePassword,
   validateEmail,
   validatePassword,
-  uploadToCloudinary,
   createResponse,
-  parseMultipartData
+  parseMultipartData // Still exported for consistency if needed elsewhere
 };
 
 // Main Vercel handler
@@ -710,25 +690,40 @@ export default async function handler(req: any, res: any) {
     return res.status(200).end();
   }
 
-  // For multipart form data, we need to handle it differently
-  let body = req.body;
-  
-  // If it's a multipart request, convert to buffer
-  if (req.headers['content-type']?.includes('multipart/form-data')) {
-    if (typeof req.body === 'string') {
-      body = Buffer.from(req.body, 'binary');
-    } else if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
-      // If it's already parsed by Vercel, handle accordingly
-      body = req.body;
+  let requestBodyForHandlers: string | Buffer | object; // Will hold the parsed JSON or raw buffer
+  let rawBodyBuffer: Buffer | undefined; // Will hold the raw buffer for multipart
+  let boundary: string | undefined;
+
+  const contentTypeHeader = req.headers['content-type'] || req.headers['Content-Type'];
+  const isMultipart = contentTypeHeader?.includes('multipart/form-data');
+
+  if (isMultipart) {
+    // Vercel's `req.body` for multipart/form-data is usually the raw buffer.
+    rawBodyBuffer = req.body; // Store the raw buffer
+    requestBodyForHandlers = rawBodyBuffer; // Pass raw buffer to handlers
+    const boundaryMatch = contentTypeHeader.match(/boundary=(.+)/i);
+    if (boundaryMatch && boundaryMatch[1]) {
+      boundary = boundaryMatch[1].replace(/"/g, '').trim();
     }
+  } else if (typeof req.body === 'string') {
+    // For non-multipart, attempt JSON parsing
+    try {
+      requestBodyForHandlers = JSON.parse(req.body);
+    } catch (e) {
+      requestBodyForHandlers = req.body; // Keep as string if not valid JSON
+    }
+  } else {
+    requestBodyForHandlers = req.body; // Already parsed by micro or other middleware
   }
 
   const request: ServerlessRequest = {
     method: req.method,
     headers: req.headers,
-    body: body,
+    body: requestBodyForHandlers,
     query: req.query,
-    url: req.url
+    url: req.url,
+    rawBody: rawBodyBuffer, // Pass the raw buffer
+    boundary: boundary // Pass the boundary
   };
 
   let response: ServerlessResponse;
@@ -778,5 +773,13 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  res.status(response.statusCode).json(JSON.parse(response.body));
+  // Safely parse the response body, assuming it's always JSON from createResponse
+  // If response.body is not valid JSON (e.g., from an uncaught server error before createResponse),
+  // this will throw, but hopefully createResponse always ensures JSON.
+  try {
+    res.status(response.statusCode).json(JSON.parse(response.body));
+  } catch (parseError) {
+    console.error("Failed to parse response body as JSON before sending:", parseError, "Raw body:", response.body);
+    res.status(500).json({ error: "Internal server error: Malformed API response." });
+  }
 }
