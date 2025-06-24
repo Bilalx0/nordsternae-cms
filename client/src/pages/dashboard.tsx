@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
+import { useLocation } from "wouter";
 import { DashLayout } from "@/components/layout/dash-layout.jsx";
-import { AuthContext } from "@/context/AuthContext";
+import { AuthContext } from "@/context/AuthContext.jsx";
 import { StatsCard } from "@/components/dashboard/stats-card.jsx";
 import { RecentEnquiries } from "@/components/dashboard/recent-enquiries.jsx";
 import { FeaturedProperties } from "@/components/dashboard/featured-properties.jsx";
@@ -19,14 +20,15 @@ import {Tabs, TabsContent, TabsList, TabsTrigger} from "@/components/ui/tabs.jsx
 import { useQueryClient } from "@tanstack/react-query";
 
 export default function Dashboard() {
-  const { user } = useContext(AuthContext);
-  const navigate = useLocation();
+  const { user } = useContext(AuthContext) as { user: any };
+  const [, setLocation] = useLocation(); // Fixed: use setLocation instead of navigate
+
 
   useEffect(() => {
     if (!user) {
-      navigate("/login");
+      setLocation("/login");
     }
-  }, [user, navigate]);
+  }, [user, setLocation]);
 
   const queryClient = useQueryClient();
   const { data: properties = [] } = useQuery({ 
