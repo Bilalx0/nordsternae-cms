@@ -20,7 +20,7 @@ export function DashLayout({ children, title, description }: DashLayoutProps) {
         <Header />
         
         {/* Content Area */}
-        <main className="flex-1">
+        <main className="flex-1 overflow-hidden">
           <div className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
             {(title || description) && (
               <div className="mb-6">
