@@ -142,43 +142,60 @@ export default function PropertyEditPage() {
 
   // Populate form when property data is loaded
   useEffect(() => {
-    if (propertyData) {
-      const formData: PropertyFormValues = { ...defaultValues, ...propertyData };
+    if (propertyData && !isNewProperty) {
+      console.log("Populating form with property data:", propertyData);
+      
+      // Create a clean form data object
+      const formData: PropertyFormValues = {
+        // String fields with fallbacks
+        reference: propertyData.reference || "",
+        listingType: propertyData.listingType || "sale",
+        propertyType: propertyData.propertyType || "villa",
+        subCommunity: propertyData.subCommunity || "",
+        community: propertyData.community || "",
+        region: propertyData.region || "Dubai",
+        country: propertyData.country || "AE",
+        propertyStatus: propertyData.propertyStatus || "Off Plan",
+        title: propertyData.title || "",
+        description: propertyData.description || "",
+        currency: propertyData.currency || "AED",
+        lifestyle: propertyData.lifestyle || "",
+        permit: propertyData.permit || "",
+        brochure: propertyData.brochure || "",
+        development: propertyData.development || "",
+        neighbourhood: propertyData.neighbourhood || "",
 
-      // Handle numeric fields
-      formData.price = typeof formData.price === 'string' ? parseFloat(formData.price) || 0 : formData.price || 0;
-      formData.bedrooms = typeof formData.bedrooms === 'string' ? parseInt(formData.bedrooms) || undefined : formData.bedrooms;
-      formData.bathrooms = typeof formData.bathrooms === 'string' ? parseInt(formData.bathrooms) || undefined : formData.bathrooms;
-      formData.sqfeetArea = typeof formData.sqfeetArea === 'string' ? parseInt(formData.sqfeetArea) || undefined : formData.sqfeetArea;
-      formData.sqfeetBuiltup = typeof formData.sqfeetBuiltup === 'string' ? parseInt(formData.sqfeetBuiltup) || undefined : formData.sqfeetBuiltup;
+        // Numeric fields with proper conversion
+        price: typeof propertyData.price === 'string' ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
+        bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === 'string' ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
+        bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === 'string' ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
+        sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === 'string' ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
+        sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === 'string' ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
 
-      // Handle amenities
-      formData.amenities = Array.isArray(formData.amenities) ? formData.amenities.join(',') : formData.amenities || '';
+        // Boolean fields with proper conversion
+        isExclusive: !!propertyData.isExclusive,
+        isFeatured: !!propertyData.isFeatured,
+        isFitted: !!propertyData.isFitted,
+        isFurnished: !!propertyData.isFurnished,
+        isDisabled: !!propertyData.isDisabled,
+        sold: !!propertyData.sold,
 
-      // Ensure boolean fields
-      formData.isExclusive = !!formData.isExclusive;
-      formData.isFeatured = !!formData.isFeatured;
-      formData.isFitted = !!formData.isFitted;
-      formData.isFurnished = !!formData.isFurnished;
-      formData.isDisabled = !!formData.isDisabled;
-      formData.sold = !!formData.sold;
+        // Array fields
+        images: Array.isArray(propertyData.images) ? propertyData.images : (propertyData.images ? [propertyData.images] : []),
+        agent: Array.isArray(propertyData.agent) ? propertyData.agent : (propertyData.agent ? [propertyData.agent] : []),
 
-      // Ensure string fields have fallback
-      formData.subCommunity = formData.subCommunity || '';
-      formData.description = formData.description || '';
-      formData.lifestyle = formData.lifestyle || '';
-      formData.permit = formData.permit || '';
-      formData.brochure = formData.brochure || '';
-      formData.development = formData.development || '';
-      formData.neighbourhood = formData.neighbourhood || '';
+        // Handle amenities (convert array to comma-separated string if needed)
+        amenities: Array.isArray(propertyData.amenities) 
+          ? propertyData.amenities.join(',') 
+          : (propertyData.amenities || ''),
+      };
 
-      // Ensure array fields
-      formData.images = Array.isArray(formData.images) ? formData.images : [];
-      formData.agent = Array.isArray(formData.agent) ? formData.agent : [];
+      console.log("Processed form data:", formData);
 
+      // Reset the form with the new data
       form.reset(formData);
     }
-  }, [propertyData, form]);
+  }, [propertyData, form, isNewProperty]);
 
   // Save property mutation
   const saveMutation = useMutation({
@@ -201,7 +218,7 @@ export default function PropertyEditPage() {
           ? "The property has been successfully created." 
           : "The property has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/proproperties'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLocation("/properties");
     },
     onError: (error) => {
@@ -215,6 +232,7 @@ export default function PropertyEditPage() {
   });
 
   const onSubmit = (data: z.infer<typeof propertyFormSchema>) => {
+    console.log("Form submitted with data:", data);
     saveMutation.mutate(data as PropertyFormValues);
   };
 
@@ -238,14 +256,12 @@ export default function PropertyEditPage() {
     form.setValue('amenities', newAmenities.join(','));
   };
 
-  console.log(propertyData)
-
   return (
     <DashLayout
       title={isNewProperty ? "Add New Property" : "Edit Property"}
       description={isNewProperty 
         ? "Create a new property listing" 
-        : `Editing property reference: ${form.watch('reference')}`}
+        : `Editing property: ${form.watch('title') || form.watch('reference') || 'Loading...'}`}
     >
       <Button
         variant="outline"
@@ -256,9 +272,10 @@ export default function PropertyEditPage() {
         Back to Properties
       </Button>
 
-      {isLoadingProperty ? (
+      {isLoadingProperty && !isNewProperty ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading property data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -294,7 +311,7 @@ export default function PropertyEditPage() {
                         <FormLabel>Listing Type</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -335,7 +352,7 @@ export default function PropertyEditPage() {
                         <FormLabel>Property Type</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -362,7 +379,7 @@ export default function PropertyEditPage() {
                         <FormLabel>Property Status</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -541,7 +558,7 @@ export default function PropertyEditPage() {
                         <FormLabel>Currency</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={field.value}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>

@@ -10,7 +10,7 @@ interface DashLayoutProps {
 
 export function DashLayout({ children, title, description }: DashLayoutProps) {
   return (
-    <div className="flex h-screen bg-neutral-50 overflow-hidden">
+    <div className="flex bg-neutral-50 overflow-auto">
       {/* Sidebar */}
       <Sidebar />
       
@@ -20,7 +20,7 @@ export function DashLayout({ children, title, description }: DashLayoutProps) {
         <Header />
         
         {/* Content Area */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-7xl p-4 md:p-6 lg:p-8">
             {(title || description) && (
               <div className="mb-6">
