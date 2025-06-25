@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; // useEffect is needed for time countdown logic if added later, but currently not used in this specific page context. I'll keep it for consistency with the original PropertiesPage.
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashLayout } from "@/components/layout/dash-layout";
@@ -6,16 +6,15 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, FileUp, FileDown } from "lucide-react";
-import { ColumnDef } from "@tanstack/react-table";
+import { Plus, FileUp, FileDown, AlertCircle, Trash2 } from "lucide-react";
+import { ColumnDef, RowSelectionState } from "@tanstack/react-table"; // Import RowSelectionState
 import { objectsToCSV, downloadCSV, formatDate } from "@/lib/utils";
-import { CSVUpload } from "@/components/ui/csv-upload";
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription 
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -29,14 +28,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
+// Define a type for SitemapEntry for better type safety, assuming it has an 'id'
+interface SitemapEntry {
+  id: number; // Assuming a unique ID for each sitemap entry
+  url: string;
+  title?: string;
+  priority?: string;
+  lastModified?: string; // Or Date if you parse it
+  changeFrequency?: string;
+}
+
 export default function SitemapPage() {
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
   const [deleteSitemapEntryId, setDeleteSitemapEntryId] = useState<number | null>(null);
+  const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
+  const [selectedRowIds, setSelectedRowIds] = useState<RowSelectionState>({}); // State to hold selected row IDs
 
   // Fetch sitemap entries
-  const { data: sitemapEntries = [], isLoading } = useQuery({
+  const { data: sitemapEntries = [], isLoading } = useQuery<SitemapEntry[]>({ // Type assertion for data
     queryKey: ['/api/sitemap'],
   });
 
@@ -73,12 +84,38 @@ export default function SitemapPage() {
     }
   };
 
-  const handleExportCSV = () => {
-    const csv = objectsToCSV(sitemapEntries);
-    downloadCSV(csv, "sitemap-entries.csv");
+  // Toggle selection mode
+  const toggleSelectionMode = (): void => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedRowIds({}); // Reset selected rows when toggling mode
+  };
+
+  // Handle export CSV
+  const handleExportCSV = (): void => {
+    // Determine which data to export based on selection mode
+    const dataToExport = isSelectionMode
+      ? sitemapEntries.filter(entry => selectedRowIds[entry.id]) // Filter by selected IDs
+      : sitemapEntries; // Export all if not in selection mode
+
+    if (isSelectionMode && dataToExport.length === 0) {
+      toast({
+        title: "No Rows Selected",
+        description: "Please select at least one sitemap entry to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const filename = isSelectionMode ? "selected_sitemap-entries.csv" : "sitemap-entries.csv";
+    const toastDescription = isSelectionMode
+      ? `Successfully exported ${dataToExport.length} selected sitemap entries to CSV.`
+      : `Successfully exported ${dataToExport.length} sitemap entries to CSV.`;
+
+    const csv = objectsToCSV(dataToExport);
+    downloadCSV(csv, filename);
     toast({
       title: "Export successful",
-      description: "Sitemap entries have been exported to CSV.",
+      description: toastDescription,
     });
   };
 
@@ -92,7 +129,31 @@ export default function SitemapPage() {
     queryClient.invalidateQueries({ queryKey: ['/api/sitemap'] });
   };
 
-  const sitemapColumns: ColumnDef<any>[] = [
+  // Define sitemap columns, including the select column
+  const sitemapColumns: ColumnDef<SitemapEntry>[] = [
+    {
+      id: "select",
+      header: ({ table }) => (
+        <input
+          type="checkbox"
+          checked={table.getIsAllRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          disabled={!isSelectionMode} // Disable if not in selection mode
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={row.getIsSelected()}
+          onChange={row.getToggleSelectedHandler()}
+          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+          disabled={!isSelectionMode} // Disable if not in selection mode
+        />
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
     {
       id: "url",
       header: "URL",
@@ -142,28 +203,44 @@ export default function SitemapPage() {
     >
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div className="mt-4 md:mt-0 flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
-          <Button 
+          <Button
             onClick={() => navigate("/sitemap/new")}
             className="flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
             Add Sitemap Entry
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={handleExportCSV}
             className="flex items-center gap-2"
           >
             <FileDown className="h-4 w-4" />
             Export CSV
           </Button>
-          <Button 
+          <Button
             variant="outline"
             onClick={() => setIsImportDialogOpen(true)}
             className="flex items-center gap-2"
           >
             <FileUp className="h-4 w-4" />
             Import CSV
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => { /* Implement delete all sitemap entries if needed */ }}
+            className="flex items-center gap-2"
+            disabled={sitemapEntries.length === 0} // Disable if no entries to delete all
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete All (Not Implemented)
+          </Button>
+          <Button
+            variant={isSelectionMode ? "default" : "outline"}
+            onClick={toggleSelectionMode}
+            className="flex items-center gap-2"
+          >
+            {isSelectionMode ? "Cancel Selection" : "Select Rows"}
           </Button>
         </div>
       </div>
@@ -181,8 +258,12 @@ export default function SitemapPage() {
             title: "title"
           }
         ]}
-        deleteRow={(row) => handleDelete(row.id)}
-        editRow={(row) => navigate(`/sitemap/${row.id}`)}
+        deleteRow={(row: SitemapEntry) => handleDelete(row.id)} // Ensure type matches SitemapEntry
+        editRow={(row: SitemapEntry) => navigate(`/sitemap/${row.id}`)} // Ensure type matches SitemapEntry
+        // --- ADDED FOR ROW SELECTION ---
+        rowSelection={selectedRowIds}
+        setRowSelection={setSelectedRowIds}
+        // ------------------------------
       />
 
       {/* Import CSV Dialog */}
