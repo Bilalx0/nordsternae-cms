@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 
 export default function Register() {
-  const { login } = useContext(AuthContext) as { login: (email: string, password: string) => Promise<void> };
+  const { login } = useContext(AuthContext)
   const [, setLocation] = useLocation(); // Fixed: use setLocation instead of navigate
   const [formData, setFormData] = useState({
     email: "",
