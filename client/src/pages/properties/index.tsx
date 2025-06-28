@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock } from "lucide-react";
-import { ColumnDef, Table } from "@tanstack/react-table"; // Import Table type
+import { ColumnDef } from "@tanstack/react-table";
 import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
 import { CSVUpload } from "@/components/ui/csv-upload";
 import {
@@ -74,15 +74,23 @@ export default function PropertiesPage() {
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
-  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({}); // Changed name for clarity
+  const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
 
-  // Replace the complex timer logic with simple countdown
-  const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60); // 15 minutes in seconds
+  const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60);
 
   // Fetch properties
-  const { data: properties = [], isLoading, refetch } = useQuery<Property[]>({
+  const { data: rawProperties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
+
+  // Deduplicate properties by reference, keeping the one with the highest ID
+  const properties = Array.isArray(rawProperties) 
+    ? [...rawProperties]
+        .sort((a, b) => b.id - a.id) // Sort by ID descending to keep latest
+        .filter((property, index, self) => 
+          index === self.findIndex(p => p.reference === property.reference)
+        )
+    : [];
 
   // Auto-import mutation with enhanced error handling
   const autoImportMutation = useMutation<ImportResponse, Error>({
@@ -94,8 +102,6 @@ export default function PropertiesPage() {
     onSuccess: (result: ImportResponse) => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLastImportTime(new Date());
-
-      // Reset timer to 15 minutes after successful import
       setTimeRemaining(15 * 60);
 
       const { processed = 0, errors = 0, results = [], total = 0 } = result;
@@ -128,7 +134,6 @@ export default function PropertiesPage() {
         description: `Failed to import properties: ${error.message || 'Server error. Please try again later.'}`,
         variant: "destructive",
       });
-      // Reset timer even on error
       setTimeRemaining(15 * 60);
     },
     onSettled: () => {
@@ -151,7 +156,6 @@ export default function PropertiesPage() {
       interval = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
-            // Timer reached 0, trigger import
             autoImportMutation.mutate();
             return 0;
           }
@@ -210,7 +214,7 @@ export default function PropertiesPage() {
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
-      const propertyIds = (properties as Property[]).map(property => property.id);
+      const propertyIds = properties.map(property => property.id);
       const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
@@ -261,12 +265,11 @@ export default function PropertiesPage() {
   // Toggle selection mode
   const toggleSelectionMode = (): void => {
     setIsSelectionMode(!isSelectionMode);
-    setSelectedRowIds({}); // Reset selected rows when toggling mode
+    setSelectedRowIds({});
   };
 
   // Handle export CSV
   const handleExportCSV = (): void => {
-    // Get selected rows from the DataTable's internal state
     const selectedData = properties.filter(property => selectedRowIds[property.id]);
 
     if (isSelectionMode) {
@@ -293,7 +296,6 @@ export default function PropertiesPage() {
       });
     }
   };
-
 
   const handleImportCSV = (data: any[]): void => {
     toast({
@@ -441,7 +443,6 @@ export default function PropertiesPage() {
       title="Properties Management"
       description="Manage all property listings across your platform"
     >
-      {/* Auto-import status bar with fixed timer */}
       <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -471,7 +472,6 @@ export default function PropertiesPage() {
           </div>
         </div>
 
-        {/* Progress bar */}
         <div className="mt-3">
           <div className="w-full bg-blue-200 rounded-full h-1.5">
             <div
@@ -562,11 +562,10 @@ export default function PropertiesPage() {
         ]}
         deleteRow={(row: Property) => handleDelete(row.id)}
         editRow={(row: Property) => setLocation(`/properties/${row.id}`)}
-        rowSelection={selectedRowIds} // Pass selectedRowIds
-        setRowSelection={setSelectedRowIds} // Pass setSelectedRowIds
+        rowSelection={selectedRowIds}
+        setRowSelection={setSelectedRowIds}
       />
 
-      {/* Import CSV Dialog */}
       <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -588,7 +587,6 @@ export default function PropertiesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Single Property Confirmation Dialog */}
       <AlertDialog open={deletePropertyId !== null} onOpenChange={(open) => !open && setDeletePropertyId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -604,7 +602,6 @@ export default function PropertiesPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete All Properties Confirmation Dialog */}
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
