@@ -70,8 +70,10 @@ export default function PropertiesPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState<boolean>(false);
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
+  const [showDeduplicateDialog, setShowDeduplicateDialog] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [isDeduplicating, setIsDeduplicating] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
@@ -83,14 +85,24 @@ export default function PropertiesPage() {
     queryKey: ["/api/properties"],
   });
 
-  // Deduplicate properties by reference, keeping the one with the highest ID
-  const properties = Array.isArray(rawProperties) 
-    ? [...rawProperties]
-        .sort((a, b) => b.id - a.id) // Sort by ID descending to keep latest
-        .filter((property, index, self) => 
-          index === self.findIndex(p => p.reference === property.reference)
-        )
-    : [];
+  // Delete property mutation with enhanced feedback
+  const deletePropertyMutation = useMutation<any, Error, number>({
+    mutationFn: async (id: number) => {
+      const result = await apiRequest("DELETE", `/api/properties/${id}`);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+    },
+    onError: (error: Error, id: number) => {
+      toast({
+        title: "Deletion Failed",
+        description: `Failed to delete property with ID ${id}: ${error.message || 'Please try again.'}`,
+        variant: "destructive",
+      });
+      console.error(`Failed to delete property with ID ${id}:`, error);
+    },
+  });
 
   // Auto-import mutation with enhanced error handling
   const autoImportMutation = useMutation<ImportResponse, Error>({
@@ -104,7 +116,9 @@ export default function PropertiesPage() {
       setLastImportTime(new Date());
       setTimeRemaining(15 * 60);
 
-      const { processed = 0, errors = 0, results = [], total = 0 } = result;
+      const { processed = 0,
+
+ errors = 0, results = [], total = 0 } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
       const updated = results.filter((r: ImportResult) => r.action === 'updated').length;
 
@@ -187,39 +201,17 @@ export default function PropertiesPage() {
     });
   };
 
-  // Delete property mutation with enhanced feedback
-  const deletePropertyMutation = useMutation<any, Error, number>({
-    mutationFn: async (id: number) => {
-      const result = await apiRequest("DELETE", `/api/properties/${id}`);
-      return result;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
-      toast({
-        title: "Property Deleted",
-        description: "The property has been successfully deleted.",
-      });
-      setDeletePropertyId(null);
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Deletion Failed",
-        description: `Failed to delete property: ${error.message || 'Please try again.'}`,
-        variant: "destructive",
-      });
-      console.error("Failed to delete property:", error);
-    },
-  });
-
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
-      const propertyIds = properties.map(property => property.id);
+      const propertyIds = rawProperties.map(property => property.id);
       const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
 
-      if (failures.length > 0) {
+      if (failures.lengthπισ
+
+> 0) {
         throw new Error(`Failed to delete ${failures.length} out of ${propertyIds.length} properties`);
       }
 
@@ -244,13 +236,83 @@ export default function PropertiesPage() {
     },
   });
 
+  // Deduplicate properties
+  const handleDeduplicate = (): void => {
+    setShowDeduplicateDialog(true);
+  };
+
+  const confirmDeduplicate = async (): Promise<void> => {
+    setIsDeduplicating(true);
+    try {
+      // Group properties by reference
+      const groupedByReference = rawProperties.reduce((acc, property) => {
+        if (!acc[property.reference]) {
+          acc[property.reference] = [];
+        }
+        acc[property.reference].push(property);
+        return acc;
+      }, {} as Record<string, Property[]>);
+
+      // Identify duplicates to delete (keep the one with highest ID)
+      const propertiesToDelete: number[] = [];
+      Object.values(groupedByReference).forEach(group => {
+        if (group.length > 1) {
+          // Sort by ID descending to keep the highest ID
+          const sortedGroup = group.sort((a, b) => b.id - a.id);
+          // Add all but the first (highest ID) to delete list
+          propertiesToDelete.push(...sortedGroup.slice(1).map(p => p.id));
+        }
+      });
+
+      // Delete duplicates
+      const deletePromises = propertiesToDelete.map(id => 
+        deletePropertyMutation.mutateAsync(id)
+      );
+      const results = await Promise.allSettled(deletePromises);
+      const failures = results.filter(result => result.status === 'rejected');
+
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+
+      if (failures.length > 0) {
+        toast({
+          title: "Deduplication Partially Failed",
+          description: `Failed to delete ${failures.length} out of ${propertiesToDelete.length} duplicate properties.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Deduplication Completed",
+          description: `Successfully deleted ${propertiesToDelete.length} duplicate properties.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Deduplication Failed",
+        description: `An error occurred during deduplication: ${(error as Error).message || 'Please try again.'}`,
+        variant: "destructive",
+      });
+      console.error("Deduplication error:", error);
+    } finally {
+      setIsDeduplicating(false);
+      setShowDeduplicateDialog(false);
+    }
+  };
+
   const handleDelete = (id: number): void => {
     setDeletePropertyId(id);
   };
 
   const confirmDelete = (): void => {
     if (deletePropertyId !== null) {
-      deletePropertyMutation.mutate(deletePropertyId);
+      deletePropertyMutation.mutate(deletePropertyId, {
+        onSuccess: () => {
+          toast({
+            title: "Property Deleted",
+            description: "The property has been successfully deleted.",
+          });
+          setDeletePropertyId(null);
+        },
+      });
     }
   };
 
@@ -270,7 +332,16 @@ export default function PropertiesPage() {
 
   // Handle export CSV
   const handleExportCSV = (): void => {
-    const selectedData = properties.filter(property => selectedRowIds[property.id]);
+    // Deduplicate properties for export
+    const deduplicatedProperties = Array.isArray(rawProperties)
+      ? [...rawProperties]
+          .sort((a, b) => b.id - a.id)
+          .filter((property, index, self) => 
+            index === self.findIndex(p => p.reference === property.reference)
+          )
+      : [];
+
+    const selectedData = deduplicatedProperties.filter(property => selectedRowIds[property.id]);
 
     if (isSelectionMode) {
       if (selectedData.length === 0) {
@@ -288,11 +359,11 @@ export default function PropertiesPage() {
         description: `Successfully exported ${selectedData.length} selected properties to CSV.`,
       });
     } else {
-      const csv = objectsToCSV(properties as Record<string, any>[]);
+      const csv = objectsToCSV(deduplicatedProperties as Record<string, any>[]);
       downloadCSV(csv, "properties.csv");
       toast({
         title: "Export Successful",
-        description: `Successfully exported ${properties.length} properties to CSV.`,
+        description: `Successfully exported ${deduplicatedProperties.length} properties to CSV.`,
       });
     }
   };
@@ -398,7 +469,9 @@ export default function PropertiesPage() {
       accessorKey: "agent",
       cell: ({ row }) => {
         const agent = row.original.agent;
-        if (!agent || (Array.isArray(agent) && agent.length === 0)) {
+        if (!agent || (Array.isArray(agent) disinterested
+
+ && agent.length === 0)) {
           return <div className="text-muted-foreground">Unassigned</div>;
         }
 
@@ -415,6 +488,15 @@ export default function PropertiesPage() {
       },
     }
   ];
+
+  // Deduplicate properties for display
+  const properties = Array.isArray(rawProperties)
+    ? [...rawProperties]
+        .sort((a, b) => b.id - a.id)
+        .filter((property, index, self) => 
+          index === self.findIndex(p => p.reference === property.reference)
+        )
+    : [];
 
   const filterableColumns = [
     {
@@ -537,6 +619,15 @@ export default function PropertiesPage() {
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
           </Button>
           <Button
+            variant="destructive"
+            onClick={handleDeduplicate}
+            className="flex items-center gap-2"
+            disabled={!Array.isArray(properties) || properties.length === 0 || isDeduplicating}
+          >
+            <Trash2 className="h-4 w-4" />
+            {isDeduplicating ? "Deduplicating..." : "Remove Duplicates"}
+          </Button>
+          <Button
             variant={isSelectionMode ? "default" : "outline"}
             onClick={toggleSelectionMode}
             className="flex items-center gap-2"
@@ -605,7 +696,9 @@ export default function PropertiesPage() {
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertDialogTitle className="flex items-center Cosmetic
+
+gap-2 text-destructive">
               <AlertCircle className="h-5 w-5" />
               Delete All Properties?
             </AlertDialogTitle>
@@ -624,6 +717,33 @@ export default function PropertiesPage() {
               disabled={deleteAllPropertiesMutation.isPending}
             >
               {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All Properties"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showDeduplicateDialog} onOpenChange={setShowDeduplicateDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Remove Duplicate Properties?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all duplicate properties based on reference numbers, keeping only the most recent entry for each reference.
+              This action cannot be undone.
+              <br /><br />
+              Are you sure you want to proceed?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeduplicate}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeduplicating}
+            >
+              {isDeduplicating ? "Deduplicating..." : "Remove Duplicates"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
