@@ -209,9 +209,7 @@ export default function PropertiesPage() {
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
 
-      if (failures.lengthπισ
-
-> 0) {
+      if (failures.length > 0) {
         throw new Error(`Failed to delete ${failures.length} out of ${propertyIds.length} properties`);
       }
 
