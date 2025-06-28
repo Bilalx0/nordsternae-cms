@@ -467,9 +467,7 @@ export default function PropertiesPage() {
       accessorKey: "agent",
       cell: ({ row }) => {
         const agent = row.original.agent;
-        if (!agent || (Array.isArray(agent) disinterested
-
- && agent.length === 0)) {
+        if (!agent || (Array.isArray(agent) && agent.length === 0)) {
           return <div className="text-muted-foreground">Unassigned</div>;
         }
 
