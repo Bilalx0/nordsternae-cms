@@ -16,59 +16,46 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sidebar } from "./sidebar";
+import { useLocation } from "wouter";
 
-// Real estate application searchable content
+// Real estate application searchable content - matching exact routes from App.tsx
 const searchableContent = [
-  { id: 1, title: "Dashboard", type: "page", url: "/dashboard", icon: Home },
+  // Main pages
+  { id: 1, title: "Dashboard", type: "page", url: "/", icon: Home },
   { id: 2, title: "Properties", type: "page", url: "/properties", icon: Home },
   { id: 3, title: "Neighborhoods", type: "page", url: "/neighborhoods", icon: Hash },
   { id: 4, title: "Developments", type: "page", url: "/developments", icon: FileText },
   { id: 5, title: "Agents", type: "page", url: "/agents", icon: User },
   { id: 6, title: "Enquiries", type: "page", url: "/enquiries", icon: Bell },
   { id: 7, title: "Articles", type: "page", url: "/articles", icon: FileText },
-  { id: 8, title: "Banner", type: "page", url: "/banner", icon: FileText },
-  { id: 9, title: "Highlights", type: "page", url: "/highlights", icon: FileText },
-  { id: 10, title: "Developers", type: "page", url: "/developers", icon: User },
-  { id: 11, title: "Sitemap", type: "page", url: "/sitemap", icon: Hash },
-  { id: 12, title: "Change Password", type: "settings", url: "/settings/change-password", icon: Settings },
-  { id: 13, title: "Delete Account", type: "settings", url: "/settings/delete-account", icon: Settings },
+  { id: 8, title: "Banner Highlights", type: "page", url: "/banner-highlights", icon: FileText },
+  { id: 9, title: "Developers", type: "page", url: "/developers", icon: User },
+  { id: 10, title: "Sitemap", type: "page", url: "/sitemap", icon: Hash },
   
-  // Property-related searches
-  { id: 14, title: "Add Property", type: "action", url: "/properties/add", icon: Home },
-  { id: 15, title: "Property List", type: "content", url: "/properties/list", icon: Home },
-  { id: 16, title: "Property Search", type: "action", url: "/properties/search", icon: Search },
+  // Settings pages
+  { id: 11, title: "Change Password", type: "settings", url: "/settings/change-password", icon: Settings },
+  { id: 12, title: "Delete Account", type: "settings", url: "/settings/delete-account", icon: Settings },
   
-  // Agent-related searches
-  { id: 17, title: "Add Agent", type: "action", url: "/agents/add", icon: User },
-  { id: 18, title: "Agent List", type: "content", url: "/agents/list", icon: User },
-  { id: 19, title: "Agent Profile", type: "content", url: "/agents/profile", icon: User },
+  // Add new/create actions
+  { id: 13, title: "Add Property", type: "action", url: "/properties/new", icon: Home },
+  { id: 14, title: "Add Agent", type: "action", url: "/agents/new", icon: User },
+  { id: 15, title: "Add Development", type: "action", url: "/developments/new", icon: FileText },
+  { id: 16, title: "Add Neighborhood", type: "action", url: "/neighborhoods/new", icon: Hash },
+  { id: 17, title: "Add Article", type: "action", url: "/articles/new", icon: FileText },
+  { id: 18, title: "Add Banner Highlight", type: "action", url: "/banner-highlights/new", icon: FileText },
+  { id: 19, title: "Add Developer", type: "action", url: "/developers/new", icon: User },
+  { id: 20, title: "Add Sitemap Entry", type: "action", url: "/sitemap/new", icon: Hash },
   
-  // Neighborhood-related searches
-  { id: 20, title: "Add Neighborhood", type: "action", url: "/neighborhoods/add", icon: Hash },
-  { id: 21, title: "Neighborhood List", type: "content", url: "/neighborhoods/list", icon: Hash },
+  // Admin functions
+  { id: 21, title: "Import Properties", type: "admin", url: "/admin/import-properties", icon: FileText },
   
-  // Development-related searches
-  { id: 22, title: "Add Development", type: "action", url: "/developments/add", icon: FileText },
-  { id: 23, title: "Development List", type: "content", url: "/developments/list", icon: FileText },
-  
-  // Enquiry-related searches
-  { id: 24, title: "New Enquiries", type: "content", url: "/enquiries/new", icon: Bell },
-  { id: 25, title: "Pending Enquiries", type: "content", url: "/enquiries/pending", icon: Bell },
-  { id: 26, title: "Completed Enquiries", type: "content", url: "/enquiries/completed", icon: Bell },
-  
-  // Article-related searches
-  { id: 27, title: "Add Article", type: "action", url: "/articles/add", icon: FileText },
-  { id: 28, title: "Article List", type: "content", url: "/articles/list", icon: FileText },
-  { id: 29, title: "Published Articles", type: "content", url: "/articles/published", icon: FileText },
-  
-  // Developer-related searches
-  { id: 30, title: "Add Developer", type: "action", url: "/developers/add", icon: User },
-  { id: 31, title: "Developer List", type: "content", url: "/developers/list", icon: User },
+  // Auth pages (public)
+  { id: 22, title: "Login", type: "auth", url: "/login", icon: LogOut },
+  { id: 23, title: "Register", type: "auth", url: "/register", icon: User },
 ];
 
 interface HeaderProps {
   onSearch?: (value: string) => void;
-  onNavigate?: (url: string) => void;
 }
 
 interface SearchResult {
@@ -79,12 +66,13 @@ interface SearchResult {
   icon: any;
 }
 
-export function Header({ onSearch, onNavigate }: HeaderProps) {
+export function Header({ onSearch }: HeaderProps) {
   const [searchValue, setSearchValue] = useState("");
   const [suggestions, setSuggestions] = useState<SearchResult[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [, navigate] = useLocation();
   
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,9 +133,8 @@ export function Header({ onSearch, onNavigate }: HeaderProps) {
     const updatedRecent = [suggestion.title, ...recentSearches.filter(s => s !== suggestion.title)].slice(0, 5);
     setRecentSearches(updatedRecent);
     
-    if (onNavigate) {
-      onNavigate(suggestion.url);
-    }
+    // Navigate using Wouter
+    navigate(suggestion.url);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -184,8 +171,9 @@ export function Header({ onSearch, onNavigate }: HeaderProps) {
     switch (type) {
       case 'page': return 'text-blue-600 bg-blue-50';
       case 'action': return 'text-green-600 bg-green-50';
-      case 'content': return 'text-purple-600 bg-purple-50';
       case 'settings': return 'text-orange-600 bg-orange-50';
+      case 'admin': return 'text-red-600 bg-red-50';
+      case 'auth': return 'text-purple-600 bg-purple-50';
       default: return 'text-gray-600 bg-gray-50';
     }
   };
@@ -317,12 +305,12 @@ export function Header({ onSearch, onNavigate }: HeaderProps) {
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem>
-                <button onClick={() => onNavigate?.('/settings/change-password')}>
+                <button onClick={() => navigate('/settings/change-password')}>
                   Change Password
                 </button>
               </DropdownMenuItem>
               <DropdownMenuItem className="text-red-600">
-                <button onClick={() => onNavigate?.('/settings/delete-account')}>
+                <button onClick={() => navigate('/settings/delete-account')}>
                   Delete Account
                 </button>
               </DropdownMenuItem>
@@ -334,7 +322,7 @@ export function Header({ onSearch, onNavigate }: HeaderProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Button variant="ghost" size="icon" className="hidden md:flex" onClick={() => onNavigate?.('/login')}>
+          <Button variant="ghost" size="icon" className="hidden md:flex" onClick={() => navigate('/login')}>
             <LogOut className="h-5 w-5" />
             <span className="sr-only">Login</span>
           </Button>
@@ -365,34 +353,29 @@ export default function HeaderDemo() {
     // Implement your search logic here
   };
 
-  const handleNavigate = (url: string) => {
-    console.log('Navigate to:', url);
-    // Implement your navigation logic here
-  };
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header onSearch={handleSearch} onNavigate={handleNavigate} />
+      <Header onSearch={handleSearch} />
       <div className="p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Search Demo</h1>
+        <h1 className="text-2xl font-bold text-gray-900 mb-4">Real Estate Dashboard Search</h1>
         <p className="text-gray-600">
-          Try searching in the header above. Search for any of these sections:
+          Try searching in the header above. Click on any suggestion to navigate to that page:
         </p>
         <ul className="mt-4 space-y-2 text-gray-600">
-          <li>• <strong>Main Pages:</strong> Dashboard, Properties, Neighborhoods, Developments</li>
-          <li>• <strong>Management:</strong> Agents, Developers, Enquiries, Articles</li>
-          <li>• <strong>Content:</strong> Banner, Highlights, Sitemap</li>
+          <li>• <strong>Main Pages:</strong> Properties, Neighborhoods, Developments, Agents</li>
+          <li>• <strong>Quick Actions:</strong> Add Property, Add Agent, Add Development</li>
+          <li>• <strong>Management:</strong> Enquiries, Articles, Banner Highlights</li>
           <li>• <strong>Settings:</strong> Change Password, Delete Account</li>
-          <li>• <strong>Actions:</strong> Add Property, Add Agent, New Enquiries</li>
+          <li>• <strong>Admin:</strong> Import Properties</li>
         </ul>
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-          <h3 className="font-medium text-blue-900 mb-2">Search Features:</h3>
+          <h3 className="font-medium text-blue-900 mb-2">Navigation Features:</h3>
           <ul className="text-sm text-blue-800 space-y-1">
-            <li>• Auto-suggestions as you type</li>
-            <li>• Recent search history</li>
-            <li>• Keyboard navigation (↑↓ Enter Escape)</li>
-            <li>• Color-coded categories</li>
-            <li>• Click outside to close</li>
+            <li>• Click any suggestion to navigate instantly</li>
+            <li>• All routes match your App.tsx exactly</li>
+            <li>• Recent searches are saved</li>
+            <li>• Keyboard shortcuts: ↑↓ Enter Escape</li>
+            <li>• Color-coded by category</li>
           </ul>
         </div>
       </div>

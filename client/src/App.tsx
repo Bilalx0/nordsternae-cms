@@ -85,9 +85,7 @@ function Router() {
       <ProtectedRoute path="/sitemap" component={SitemapPage} />
       <ProtectedRoute path="/sitemap/new" component={SitemapEditPage} />
       <ProtectedRoute path="/sitemap/:id" component={SitemapEditPage} />
-      <ProtectedRoute path="/settings/profile" component={UpdateProfile} />
       <ProtectedRoute path="/settings/change-password" component={ChangePassword} />
-      <ProtectedRoute path="/settings/upload-image" component={UploadProfileImage} />
       <ProtectedRoute path="/settings/delete-account" component={DeleteAccount} />
 
       {/* Fallback to 404 */}
