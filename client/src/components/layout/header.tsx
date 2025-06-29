@@ -46,9 +46,6 @@ const searchableContent = [
   { id: 19, title: "Add Developer", type: "action", url: "/developers/new", icon: User },
   { id: 20, title: "Add Sitemap Entry", type: "action", url: "/sitemap/new", icon: Hash },
   
-  // Admin functions
-  { id: 21, title: "Import Properties", type: "admin", url: "/admin/import-properties", icon: FileText },
-  
   // Auth pages (public)
   { id: 22, title: "Login", type: "auth", url: "/login", icon: LogOut },
   { id: 23, title: "Register", type: "auth", url: "/register", icon: User },
