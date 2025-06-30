@@ -110,14 +110,21 @@ export default function Register() {
         throw new Error(data.error || "Registration failed");
       }
 
+      // Login the user after successful registration
       await login(formData.email, formData.password);
-      toast.success("Registration successful");
+      
+      // Show success message
+      toast.success("Registration successful! Welcome!");
+      
+      // Navigate to home page
       setLocation("/");
+      
     } catch (error: any) {
       toast.error(error.message);
-    } finally {
       setIsSubmitting(false);
     }
+    // Note: Don't set isSubmitting to false here if navigation is successful
+    // as the component will unmount
   };
 
   return (
