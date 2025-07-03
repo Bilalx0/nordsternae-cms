@@ -108,9 +108,11 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
     }
 
     // Furnished status
-    const furnishedStatus = extractValue(xmlProperty.furnished).toLowerCase();
-    const isFitted = furnishedStatus.includes('partly');
-    const isFurnished = furnishedStatus.includes('fully');
+    const furnishedValue = extractValue(xmlProperty.furnished)?.toLowerCase() || '';
+    // Normalize Furnished to boolean (true for "yes" or "partly", false for "no" or empty)
+    const Furnished = furnishedValue === 'yes' || furnishedValue === 'partly' ? true : false;
+    // isFitted is true if the property is partly furnished
+    const isFitted = furnishedValue.includes('partly');
 
     return {
       reference,
@@ -134,7 +136,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       amenities,
       isFeatured: false,
       isFitted,
-      isFurnished,
+      isFurnished: Furnished,
       lifestyle: '',
       permit: extractValue(xmlProperty.permit_number) || null,
       brochure: '',

@@ -40,6 +40,7 @@ interface Property {
   price: number;
   currency: string;
   propertyStatus: string;
+  isFurnished: boolean; // Updated to isFurnished
   agent?: {
     id: string;
     name: string;
@@ -116,9 +117,7 @@ export default function PropertiesPage() {
       setLastImportTime(new Date());
       setTimeRemaining(15 * 60);
 
-      const { processed = 0,
-
- errors = 0, results = [], total = 0 } = result;
+      const { processed = 0, errors = 0, results = [], total = 0 } = result;
       const created = results.filter((r: ImportResult) => r.action === 'created').length;
       const updated = results.filter((r: ImportResult) => r.action === 'updated').length;
 
@@ -482,7 +481,18 @@ export default function PropertiesPage() {
           </div>
         );
       },
-    }
+    },
+    {
+      id: "isFurnished",
+      header: "Furnished",
+      accessorKey: "isFurnished",
+      cell: ({ row }) => (
+        <Badge variant={row.original.isFurnished ? "default" : "secondary"}>
+          {row.original.isFurnished ? "Furnished" : "Unfurnished"}
+        </Badge>
+      ),
+      enableSorting: true,
+    },
   ];
 
   // Deduplicate properties for display
@@ -510,8 +520,16 @@ export default function PropertiesPage() {
       title: "Status",
       options: [
         { label: "Off Plan", value: "Off Plan" },
-        { label: "Ready", value: "Ready" },
+        { label: "Ready", value: " READY" },
         { label: "Sold", value: "Sold" }
+      ]
+    },
+    {
+      id: "isFurnished",
+      title: "Furnished",
+      options: [
+        { label: "Furnished", value: true },
+        { label: "Unfurnished", value: false }
       ]
     }
   ];
@@ -614,7 +632,7 @@ export default function PropertiesPage() {
             <Trash2 className="h-4 w-4" />
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
           </Button>
-          {/* <Button
+          <Button
             variant="destructive"
             onClick={handleDeduplicate}
             className="flex items-center gap-2"
@@ -622,7 +640,7 @@ export default function PropertiesPage() {
           >
             <Trash2 className="h-4 w-4" />
             {isDeduplicating ? "Deduplicating..." : "Remove Duplicates"}
-          </Button> */}
+          </Button>
           <Button
             variant={isSelectionMode ? "default" : "outline"}
             onClick={toggleSelectionMode}
@@ -692,9 +710,7 @@ export default function PropertiesPage() {
       <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center Cosmetic
-
-gap-2 text-destructive">
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertCircle className="h-5 w-5" />
               Delete All Properties?
             </AlertDialogTitle>
