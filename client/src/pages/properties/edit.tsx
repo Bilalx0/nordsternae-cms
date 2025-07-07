@@ -959,7 +959,7 @@ export default function PropertyEditPage() {
                               }
                             }
                           }}
-                          value={field.value?.[0]?.id ?? ""}
+                          value={field.value?.[0]?.id ?? "none"}
                         >
                           <FormControl>
                             <SelectTrigger>
