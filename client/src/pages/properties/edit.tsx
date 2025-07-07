@@ -124,15 +124,23 @@ export default function PropertyEditPage() {
   const propertyId = isNewProperty ? null : parseInt(params?.id || "");
 
   // Fetch agents for the dropdown
-  const { data: agents = [] } = useQuery({
+  const { data: agents = [], isLoading: isLoadingAgents } = useQuery({
     queryKey: ['/api/agents'],
-    queryFn: () => apiRequest("GET", "/api/agents")
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/agents");
+      console.log("Fetched agents:", response);
+      return response;
+    }
   });
 
   // Fetch property data if editing
   const { data: propertyData, isLoading: isLoadingProperty } = useQuery({
     queryKey: ['/api/properties', propertyId],
-    queryFn: () => apiRequest("GET", `/api/properties/${propertyId}`),
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/properties/${propertyId}`);
+      console.log("Fetched property data:", response);
+      return response;
+    },
     enabled: !!propertyId,
   });
 
@@ -193,6 +201,7 @@ export default function PropertyEditPage() {
       };
 
       console.log("Processed form data:", formData);
+      console.log("Agent field value:", formData.agent);
 
       // Reset the form with the new data
       form.reset(formData);
@@ -207,6 +216,8 @@ export default function PropertyEditPage() {
         data.amenities = data.amenities.join(',');
       }
       
+      console.log("Saving property with data:", data);
+
       if (isNewProperty) {
         return apiRequest("POST", "/api/properties", data);
       } else {
@@ -278,6 +289,11 @@ export default function PropertyEditPage() {
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <span className="ml-2">Loading property data...</span>
+        </div>
+      ) : isLoadingAgents ? (
+        <div className="flex justify-center items-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading agents data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -929,18 +945,21 @@ export default function PropertyEditPage() {
                         <FormLabel>Assigned Agent</FormLabel>
                         <Select 
                           onValueChange={(value) => {
-                            const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
-                            if (selectedAgent) {
-                              console.log("Agent selected:", selectedAgent);
-                              field.onChange([{ 
-                                id: selectedAgent.id.toString(), 
-                                name: selectedAgent.name 
-                              }]);
-                            } else {
+                            if (value === "") {
+                              console.log("Agent cleared");
                               field.onChange([]);
+                            } else {
+                              const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
+                              if (selectedAgent) {
+                                console.log("Agent selected:", selectedAgent);
+                                field.onChange([{ 
+                                  id: selectedAgent.id.toString(), 
+                                  name: selectedAgent.name 
+                                }]);
+                              }
                             }
                           }}
-                          value={field.value && field.value[0]?.id ? field.value[0].id : ""}
+                          value={field.value?.[0]?.id ?? ""}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -948,6 +967,7 @@ export default function PropertyEditPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
+                            <SelectItem value="">No Agent</SelectItem>
                             {(agents as Array<{id: number; name: string}>).map((agent) => (
                               <SelectItem key={agent.id} value={agent.id.toString()}>
                                 {agent.name}
@@ -955,6 +975,9 @@ export default function PropertyEditPage() {
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormDescription>
+                          Select an agent to assign to this property
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
