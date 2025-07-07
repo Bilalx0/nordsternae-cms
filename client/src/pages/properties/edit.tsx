@@ -120,6 +120,7 @@ export default function PropertyEditPage() {
   const [match, params] = useRoute("/properties/:id");
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
+  const [isFormReady, setIsFormReady] = useState(false);
   const isNewProperty = !match || params?.id === "new";
   const propertyId = isNewProperty ? null : parseInt(params?.id || "");
 
@@ -141,61 +142,148 @@ export default function PropertyEditPage() {
   });
 
   // Populate form when property data is loaded
-  useEffect(() => {
-    if (propertyData && !isNewProperty) {
-      console.log("Populating form with property data:", propertyData);
-      
-      // Create a clean form data object
-      const formData: PropertyFormValues = {
-        // String fields with fallbacks
-        reference: propertyData.reference || "",
-        listingType: propertyData.listingType || "sale",
-        propertyType: propertyData.propertyType || "villa",
-        subCommunity: propertyData.subCommunity || "",
-        community: propertyData.community || "",
-        region: propertyData.region || "Dubai",
-        country: propertyData.country || "AE",
-        propertyStatus: propertyData.propertyStatus || "Off Plan",
-        title: propertyData.title || "",
-        description: propertyData.description || "",
-        currency: propertyData.currency || "AED",
-        lifestyle: propertyData.lifestyle || "",
-        permit: propertyData.permit || "",
-        brochure: propertyData.brochure || "",
-        development: propertyData.development || "",
-        neighbourhood: propertyData.neighbourhood || "",
+  
 
-        // Numeric fields with proper conversion
-        price: typeof propertyData.price === 'string' ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
-        bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === 'string' ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
-        bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === 'string' ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
-        sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === 'string' ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
-        sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === 'string' ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
+// 2. Fix the useEffect for form population
+useEffect(() => {
+  if (propertyData && !isNewProperty && !isFormReady) {
+    console.log("Populating form with property data:", propertyData);
+    
+    // Create a clean form data object
+    const formData = {
+      // String fields with fallbacks
+      reference: propertyData.reference || "",
+      listingType: propertyData.listingType || "sale",
+      propertyType: propertyData.propertyType || "villa",
+      subCommunity: propertyData.subCommunity || "",
+      community: propertyData.community || "",
+      region: propertyData.region || "Dubai",
+      country: propertyData.country || "AE",
+      propertyStatus: propertyData.propertyStatus || "Off Plan",
+      title: propertyData.title || "",
+      description: propertyData.description || "",
+      currency: propertyData.currency || "AED",
+      lifestyle: propertyData.lifestyle || "",
+      permit: propertyData.permit || "",
+      brochure: propertyData.brochure || "",
+      development: propertyData.development || "",
+      neighbourhood: propertyData.neighbourhood || "",
 
-        // Boolean fields with proper conversion
-        isExclusive: !!propertyData.isExclusive,
-        isFeatured: !!propertyData.isFeatured,
-        isFitted: !!propertyData.isFitted,
-        isFurnished: !!propertyData.isFurnished,
-        isDisabled: !!propertyData.isDisabled,
-        sold: !!propertyData.sold,
+      // Numeric fields with proper conversion
+      price: typeof propertyData.price === 'string' ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
+      bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === 'string' ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
+      bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === 'string' ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
+      sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === 'string' ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
+      sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === 'string' ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
 
-        // Array fields
-        images: Array.isArray(propertyData.images) ? propertyData.images : (propertyData.images ? [propertyData.images] : []),
-        agent: Array.isArray(propertyData.agent) ? propertyData.agent : (propertyData.agent ? [propertyData.agent] : []),
+      // Boolean fields with proper conversion
+      isExclusive: Boolean(propertyData.isExclusive),
+      isFeatured: Boolean(propertyData.isFeatured),
+      isFitted: Boolean(propertyData.isFitted),
+      isFurnished: Boolean(propertyData.isFurnished),
+      isDisabled: Boolean(propertyData.isDisabled),
+      sold: Boolean(propertyData.sold),
 
-        // Handle amenities (convert array to comma-separated string if needed)
-        amenities: Array.isArray(propertyData.amenities) 
-          ? propertyData.amenities.join(',') 
-          : (propertyData.amenities || ''),
+      // Array fields
+      images: Array.isArray(propertyData.images) ? propertyData.images : (propertyData.images ? [propertyData.images] : []),
+      agent: Array.isArray(propertyData.agent) ? propertyData.agent : (propertyData.agent ? [propertyData.agent] : []),
+
+      // Handle amenities (convert array to comma-separated string if needed)
+      amenities: Array.isArray(propertyData.amenities) 
+        ? propertyData.amenities.join(',') 
+        : (propertyData.amenities || ''),
+    };
+
+    console.log("Processed form data:", formData);
+
+    // Reset the form with the new data and mark as ready
+    form.reset(formData);
+    setIsFormReady(true);
+  }
+}, [propertyData, form, isNewProperty, isFormReady]);
+
+// 3. Reset form ready state when switching between properties
+useEffect(() => {
+  setIsFormReady(false);
+}, [propertyId]);
+
+// 4. Add this to your form loading condition
+if ((isLoadingProperty && !isNewProperty) || (!isFormReady && !isNewProperty)) {
+  return (
+    <div className="flex justify-center items-center h-64">
+      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <span className="ml-2">Loading property data...</span>
+    </div>
+  );
+}
+
+// 5. Alternative approach - Use form.setValue instead of form.reset
+// Replace the form.reset(formData) with individual setValue calls:
+
+Object.entries(formData).forEach(([key, value]) => {
+  form.setValue(key, value, { shouldValidate: false, shouldDirty: false });
+});
+
+// 6. For Select components, make sure to handle undefined values properly:
+// Instead of:
+value={field.value}
+
+// Use:
+value={field.value || ""}
+
+// 7. For the agent field specifically, fix the structure:
+// The issue might be that your agent field expects an array but you're setting a single object
+// Make sure your agent field handling matches your schema:
+
+agent: Array.isArray(propertyData.agent) 
+  ? propertyData.agent.map(agent => ({
+      id: agent.id?.toString() || agent.id,
+      name: agent.name || ''
+    }))
+  : propertyData.agent 
+    ? [{
+        id: propertyData.agent.id?.toString() || propertyData.agent.id,
+        name: propertyData.agent.name || ''
+      }]
+    : [],
+
+// 8. Add form validation state reset:
+useEffect(() => {
+  if (isFormReady) {
+    form.clearErrors();
+  }
+}, [isFormReady, form]);
+
+// 9. Debug helper - add this to see what's happening:
+console.log("Form values:", form.watch());
+console.log("Form errors:", form.formState.errors);
+console.log("Is form ready:", isFormReady);
+console.log("Property data:", propertyData);
+
+// 10. Complete fixed useEffect:
+useEffect(() => {
+  if (propertyData && !isNewProperty && !isFormReady) {
+    console.log("Populating form with property data:", propertyData);
+    
+    // Use setTimeout to ensure form is fully initialized
+    setTimeout(() => {
+      const formData = {
+        // ... your form data object
       };
-
-      console.log("Processed form data:", formData);
-
-      // Reset the form with the new data
-      form.reset(formData);
-    }
-  }, [propertyData, form, isNewProperty]);
+      
+      // Use setValue for each field to ensure proper updates
+      Object.entries(formData).forEach(([key, value]) => {
+        form.setValue(key, value, { 
+          shouldValidate: false, 
+          shouldDirty: false,
+          shouldTouch: false 
+        });
+      });
+      
+      setIsFormReady(true);
+    }, 0);
+  }
+}, [propertyData, form, isNewProperty, isFormReady]);
 
   // Save property mutation
   const saveMutation = useMutation({
