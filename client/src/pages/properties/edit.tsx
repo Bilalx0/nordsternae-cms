@@ -967,7 +967,7 @@ export default function PropertyEditPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">No Agent</SelectItem>
+                            <SelectItem value="no-agent">No Agent</SelectItem>
                             {(agents as Array<{id: number; name: string}>).map((agent) => (
                               <SelectItem key={agent.id} value={agent.id.toString()}>
                                 {agent.name}
