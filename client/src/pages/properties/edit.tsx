@@ -312,8 +312,11 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Listing Type</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
+                          onValueChange={(value) => {
+                            console.log("Listing Type changed to:", value);
+                            field.onChange(value);
+                          }}
+                          value={field.value || "sale"}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -353,8 +356,11 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Property Type</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
+                          onValueChange={(value) => {
+                            console.log("Property Type changed to:", value);
+                            field.onChange(value);
+                          }}
+                          value={field.value || "villa"}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -380,8 +386,11 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Property Status</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
+                          onValueChange={(value) => {
+                            console.log("Property Status changed to:", value);
+                            field.onChange(value);
+                          }}
+                          value={field.value || "Off Plan"}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -559,8 +568,11 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Currency</FormLabel>
                         <Select 
-                          onValueChange={field.onChange} 
-                          value={field.value}
+                          onValueChange={(value) => {
+                            console.log("Currency changed to:", value);
+                            field.onChange(value);
+                          }}
+                          value={field.value || "AED"}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -919,15 +931,16 @@ export default function PropertyEditPage() {
                           onValueChange={(value) => {
                             const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
                             if (selectedAgent) {
+                              console.log("Agent selected:", selectedAgent);
                               field.onChange([{ 
                                 id: selectedAgent.id.toString(), 
                                 name: selectedAgent.name 
                               }]);
+                            } else {
+                              field.onChange([]);
                             }
                           }}
-                          value={field.value && field.value[0]?.id 
-                            ? field.value[0].id 
-                            : undefined}
+                          value={field.value && field.value[0]?.id ? field.value[0].id : ""}
                         >
                           <FormControl>
                             <SelectTrigger>
