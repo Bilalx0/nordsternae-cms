@@ -39,37 +39,6 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
-// Define amenities with short codes and full descriptions
-const amenitiesList = [
-  { code: "AC", description: "Central A/C & Heating" },
-  { code: "BA", description: "Balcony" },
-  { code: "BK", description: "Built-in Kitchen Appliances" },
-  { code: "BL", description: "View of Landmark" },
-  { code: "BW", description: "Built-in Wardrobes" },
-  { code: "CP", description: "Covered Parking" },
-  { code: "CS", description: "Concierge Service" },
-  { code: "LB", description: "Lobby in Building" },
-  { code: "MR", description: "Maid's Room" },
-  { code: "MS", description: "Maid Service" },
-  { code: "PA", description: "Pets Allowed" },
-  { code: "PG", description: "Private Garden" },
-  { code: "PJ", description: "Private Jacuzzi" },
-  { code: "PP", description: "Private Pool" },
-  { code: "PY", description: "Private Gym" },
-  { code: "VC", description: "Vastu-compliant" },
-  { code: "SE", description: "Security" },
-  { code: "SP", description: "Shared Pool" },
-  { code: "SS", description: "Shared Spa" },
-  { code: "ST", description: "Study" },
-  { code: "SY", description: "Shared Gym" },
-  { code: "VW", description: "View of Water" },
-  { code: "WC", description: "Walk-in Closet" },
-  { code: "CO", description: "Children's Pool" },
-  { code: "PR", description: "Children's Play Area" },
-  { code: "BR", description: "Barbecue Area" },
-];
-
-// Zod schema remains the same as it accepts a comma-separated string for amenities
 const propertyFormSchema = z.object({
   reference: z.string().min(3, "Reference must be at least 3 characters"),
   listingType: z.string(),
@@ -100,7 +69,7 @@ const propertyFormSchema = z.object({
   isDisabled: z.boolean().optional(),
   development: z.string().optional(),
   neighbourhood: z.string().optional(),
-  sold: z.boolean().optional(),
+  sold: z.boolean().optional()
 });
 
 const defaultValues: PropertyFormValues = {
@@ -133,8 +102,19 @@ const defaultValues: PropertyFormValues = {
   isDisabled: false,
   development: "",
   neighbourhood: "",
-  sold: false,
+  sold: false
 };
+
+const amenitiesList = [
+  "Balcony", "BBQ area", "Built in wardrobes", "Central air conditioning",
+  "Covered parking", "Fully fitted kitchen", "Private Gym", "Private Jacuzzi",
+  "Kitchen Appliances", "Maids Room", "Pets allowed", "Private Garden",
+  "Private Pool", "Sauna", "Steam room", "Study", "Sea/Water view",
+  "Security", "Maintenance", "Within a Compound", "Indoor swimming pool",
+  "Golf view", "Terrace", "Concierge Service", "Spa", "Maid Service",
+  "Walk-in Closet", "Heating", "Children's Play Area", "Lobby in Building",
+  "Children's Pool"
+];
 
 export default function PropertyEditPage() {
   const [match, params] = useRoute("/properties/:id");
@@ -145,17 +125,17 @@ export default function PropertyEditPage() {
 
   // Fetch agents for the dropdown
   const { data: agents = [], isLoading: isLoadingAgents } = useQuery({
-    queryKey: ["/api/agents"],
+    queryKey: ['/api/agents'],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/agents");
       console.log("Fetched agents:", response);
       return response;
-    },
+    }
   });
 
   // Fetch property data if editing
   const { data: propertyData, isLoading: isLoadingProperty } = useQuery({
-    queryKey: ["/api/properties", propertyId],
+    queryKey: ['/api/properties', propertyId],
     queryFn: async () => {
       const response = await apiRequest("GET", `/api/properties/${propertyId}`);
       console.log("Fetched property data:", response);
@@ -174,9 +154,10 @@ export default function PropertyEditPage() {
   useEffect(() => {
     if (propertyData && !isNewProperty) {
       console.log("Populating form with property data:", propertyData);
-
+      
       // Create a clean form data object
       const formData: PropertyFormValues = {
+        // String fields with fallbacks
         reference: propertyData.reference || "",
         listingType: propertyData.listingType || "sale",
         propertyType: propertyData.propertyType || "villa",
@@ -193,28 +174,36 @@ export default function PropertyEditPage() {
         brochure: propertyData.brochure || "",
         development: propertyData.development || "",
         neighbourhood: propertyData.neighbourhood || "",
-        price: typeof propertyData.price === "string" ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
-        bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === "string" ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
-        bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === "string" ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
-        sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === "string" ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
-        sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === "string" ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
+
+        // Numeric fields with proper conversion
+        price: typeof propertyData.price === 'string' ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
+        bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === 'string' ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
+        bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === 'string' ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
+        sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === 'string' ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
+        sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === 'string' ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
+
+        // Boolean fields with proper conversion
         isExclusive: !!propertyData.isExclusive,
         isFeatured: !!propertyData.isFeatured,
         isFitted: !!propertyData.isFitted,
         isFurnished: !!propertyData.isFurnished,
         isDisabled: !!propertyData.isDisabled,
         sold: !!propertyData.sold,
+
+        // Array fields
         images: Array.isArray(propertyData.images) ? propertyData.images : (propertyData.images ? [propertyData.images] : []),
         agent: Array.isArray(propertyData.agent) ? propertyData.agent : (propertyData.agent ? [propertyData.agent] : []),
-        // Handle amenities: ensure it's a comma-separated string of short codes
-        amenities: Array.isArray(propertyData.amenities)
-          ? propertyData.amenities.join(",")
-          : (propertyData.amenities || ""),
+
+        // Handle amenities (convert array to comma-separated string if needed)
+        amenities: Array.isArray(propertyData.amenities) 
+          ? propertyData.amenities.join(',') 
+          : (propertyData.amenities || ''),
       };
 
       console.log("Processed form data:", formData);
       console.log("Agent field value:", formData.agent);
 
+      // Reset the form with the new data
       form.reset(formData);
     }
   }, [propertyData, form, isNewProperty]);
@@ -222,11 +211,11 @@ export default function PropertyEditPage() {
   // Save property mutation
   const saveMutation = useMutation({
     mutationFn: async (data: PropertyFormValues) => {
-      // Ensure amenities is a comma-separated string of short codes
+      // Parse amenities selection from array of strings to comma-separated string
       if (Array.isArray(data.amenities)) {
-        data.amenities = data.amenities.join(",");
+        data.amenities = data.amenities.join(',');
       }
-
+      
       console.log("Saving property with data:", data);
 
       if (isNewProperty) {
@@ -238,11 +227,11 @@ export default function PropertyEditPage() {
     onSuccess: () => {
       toast({
         title: isNewProperty ? "Property created" : "Property updated",
-        description: isNewProperty
-          ? "The property has been successfully created."
+        description: isNewProperty 
+          ? "The property has been successfully created." 
           : "The property has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/properties"] });
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
       setLocation("/properties");
     },
     onError: (error) => {
@@ -252,7 +241,7 @@ export default function PropertyEditPage() {
         description: `Failed to ${isNewProperty ? "create" : "update"} property. Please try again.`,
         variant: "destructive",
       });
-    },
+    }
   });
 
   const onSubmit = (data: z.infer<typeof propertyFormSchema>) => {
@@ -262,30 +251,30 @@ export default function PropertyEditPage() {
 
   // Convert comma-separated amenities string to array for checkboxes
   const getSelectedAmenities = () => {
-    const amenitiesValue = form.watch("amenities");
+    const amenitiesValue = form.watch('amenities');
     if (!amenitiesValue) return [];
-    return typeof amenitiesValue === "string"
-      ? amenitiesValue.split(",").filter(Boolean)
+    return typeof amenitiesValue === 'string' 
+      ? amenitiesValue.split(',').filter(Boolean) 
       : amenitiesValue;
   };
-
+  
   const selectedAmenities = getSelectedAmenities();
 
-  const toggleAmenity = (code: string) => {
+  const toggleAmenity = (amenity: string) => {
     const currentAmenities = getSelectedAmenities();
-    const newAmenities = currentAmenities.includes(code)
-      ? currentAmenities.filter((a) => a !== code)
-      : [...currentAmenities, code];
-
-    form.setValue("amenities", newAmenities.join(","));
+    const newAmenities = currentAmenities.includes(amenity)
+      ? currentAmenities.filter(a => a !== amenity)
+      : [...currentAmenities, amenity];
+    
+    form.setValue('amenities', newAmenities.join(','));
   };
 
   return (
     <DashLayout
       title={isNewProperty ? "Add New Property" : "Edit Property"}
-      description={isNewProperty
-        ? "Create a new property listing"
-        : `Editing property: ${form.watch("title") || form.watch("reference") || "Loading..."}`}
+      description={isNewProperty 
+        ? "Create a new property listing" 
+        : `Editing property: ${form.watch('title') || form.watch('reference') || 'Loading...'}`}
     >
       <Button
         variant="outline"
@@ -309,7 +298,6 @@ export default function PropertyEditPage() {
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Basic Information Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
@@ -332,13 +320,14 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="listingType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Listing Type</FormLabel>
-                        <Select
+                        <Select 
                           onValueChange={(value) => {
                             console.log("Listing Type changed to:", value);
                             field.onChange(value);
@@ -360,6 +349,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+
                 <FormField
                   control={form.control}
                   name="title"
@@ -373,6 +363,7 @@ export default function PropertyEditPage() {
                     </FormItem>
                   )}
                 />
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -380,7 +371,7 @@ export default function PropertyEditPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Property Type</FormLabel>
-                        <Select
+                        <Select 
                           onValueChange={(value) => {
                             console.log("Property Type changed to:", value);
                             field.onChange(value);
@@ -403,13 +394,14 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="propertyStatus"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Property Status</FormLabel>
-                        <Select
+                        <Select 
                           onValueChange={(value) => {
                             console.log("Property Status changed to:", value);
                             field.onChange(value);
@@ -431,6 +423,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="sold"
@@ -455,7 +448,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Location Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Location</CardTitle>
@@ -478,6 +470,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="subCommunity"
@@ -492,6 +485,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -506,6 +500,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="country"
@@ -520,6 +515,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -534,6 +530,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="neighbourhood"
@@ -551,7 +548,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Property Details Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Property Details</CardTitle>
@@ -568,9 +564,9 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Price</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="1000000"
+                          <Input 
+                            type="number" 
+                            placeholder="1000000" 
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                             value={field.value || ""}
@@ -580,13 +576,14 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="currency"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Currency</FormLabel>
-                        <Select
+                        <Select 
                           onValueChange={(value) => {
                             console.log("Currency changed to:", value);
                             field.onChange(value);
@@ -608,6 +605,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="isExclusive"
@@ -629,6 +627,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
@@ -637,9 +636,9 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Bedrooms</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="4"
+                          <Input 
+                            type="number" 
+                            placeholder="4" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -649,6 +648,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="bathrooms"
@@ -656,9 +656,9 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Bathrooms</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="3"
+                          <Input 
+                            type="number" 
+                            placeholder="3" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -668,6 +668,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="sqfeetArea"
@@ -675,9 +676,9 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Area (sq ft)</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="2500"
+                          <Input 
+                            type="number" 
+                            placeholder="2500" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -687,6 +688,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="sqfeetBuiltup"
@@ -694,9 +696,9 @@ export default function PropertyEditPage() {
                       <FormItem>
                         <FormLabel>Built-up Area (sq ft)</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="3000"
+                          <Input 
+                            type="number" 
+                            placeholder="3000" 
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -707,6 +709,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -714,8 +717,8 @@ export default function PropertyEditPage() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea
-                          placeholder="Enter property description..."
+                        <Textarea 
+                          placeholder="Enter property description..." 
                           rows={6}
                           {...field}
                           value={field.value || ""}
@@ -728,7 +731,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Amenities Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Amenities</CardTitle>
@@ -739,17 +741,17 @@ export default function PropertyEditPage() {
               <CardContent>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {amenitiesList.map((amenity) => (
-                    <div key={amenity.code} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`amenity-${amenity.code}`}
-                        checked={selectedAmenities.includes(amenity.code)}
-                        onCheckedChange={() => toggleAmenity(amenity.code)}
+                    <div key={amenity} className="flex items-center space-x-2">
+                      <Checkbox 
+                        id={`amenity-${amenity}`}
+                        checked={selectedAmenities.includes(amenity)}
+                        onCheckedChange={() => toggleAmenity(amenity)}
                       />
                       <label
-                        htmlFor={`amenity-${amenity.code}`}
+                        htmlFor={`amenity-${amenity}`}
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                       >
-                        {amenity.description}
+                        {amenity}
                       </label>
                     </div>
                   ))}
@@ -757,7 +759,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Property Features Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Property Features</CardTitle>
@@ -787,6 +788,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="isFitted"
@@ -807,6 +809,7 @@ export default function PropertyEditPage() {
                       </FormItem>
                     )}
                   />
+                  
                   <FormField
                     control={form.control}
                     name="isFurnished"
@@ -828,6 +831,7 @@ export default function PropertyEditPage() {
                     )}
                   />
                 </div>
+                
                 <FormField
                   control={form.control}
                   name="lifestyle"
@@ -835,8 +839,8 @@ export default function PropertyEditPage() {
                     <FormItem>
                       <FormLabel>Lifestyle</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Luxury, Beach, Family..."
+                        <Input 
+                          placeholder="Luxury, Beach, Family..." 
                           {...field}
                           value={field.value || ""}
                         />
@@ -848,6 +852,7 @@ export default function PropertyEditPage() {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="permit"
@@ -855,8 +860,8 @@ export default function PropertyEditPage() {
                     <FormItem>
                       <FormLabel>Permit Number</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Permit reference..."
+                        <Input 
+                          placeholder="Permit reference..." 
                           {...field}
                           value={field.value || ""}
                         />
@@ -868,7 +873,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Media & Documents Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Media & Documents</CardTitle>
@@ -900,6 +904,7 @@ export default function PropertyEditPage() {
                     </FormItem>
                   )}
                 />
+                
                 <FormField
                   control={form.control}
                   name="brochure"
@@ -907,8 +912,8 @@ export default function PropertyEditPage() {
                     <FormItem>
                       <FormLabel>Brochure</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Brochure URL..."
+                        <Input 
+                          placeholder="Brochure URL..." 
                           {...field}
                           value={field.value || ""}
                         />
@@ -923,7 +928,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Agent Assignment Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Agent Assignment</CardTitle>
@@ -939,27 +943,23 @@ export default function PropertyEditPage() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Assigned Agent</FormLabel>
-                        <Select
+                        <Select 
                           onValueChange={(value) => {
-                            if (value === "no-agent") {
+                            if (value === "") {
                               console.log("Agent cleared");
                               field.onChange([]);
                             } else {
-                              const selectedAgent = (agents as Array<{ id: number; name: string }>).find(
-                                (a) => a.id === parseInt(value)
-                              );
+                              const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
                               if (selectedAgent) {
                                 console.log("Agent selected:", selectedAgent);
-                                field.onChange([
-                                  {
-                                    id: selectedAgent.id.toString(),
-                                    name: selectedAgent.name,
-                                  },
-                                ]);
+                                field.onChange([{ 
+                                  id: selectedAgent.id.toString(), 
+                                  name: selectedAgent.name 
+                                }]);
                               }
                             }
                           }}
-                          value={field.value?.[0]?.id ?? "no-agent"}
+                          value={field.value?.[0]?.id ?? "none"}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -968,7 +968,7 @@ export default function PropertyEditPage() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="no-agent">No Agent</SelectItem>
-                            {(agents as Array<{ id: number; name: string }>).map((agent) => (
+                            {(agents as Array<{id: number; name: string}>).map((agent) => (
                               <SelectItem key={agent.id} value={agent.id.toString()}>
                                 {agent.name}
                               </SelectItem>
@@ -986,7 +986,6 @@ export default function PropertyEditPage() {
               </CardContent>
             </Card>
 
-            {/* Visibility Card */}
             <Card>
               <CardHeader>
                 <CardTitle>Visibility</CardTitle>
@@ -1027,7 +1026,7 @@ export default function PropertyEditPage() {
               >
                 Cancel
               </Button>
-              <Button
+              <Button 
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"
