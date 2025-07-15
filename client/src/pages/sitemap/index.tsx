@@ -5,7 +5,7 @@ import { DashLayout } from "@/components/layout/dash-layout";
 import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { CSVUpload } from "@/components/ui/csv-upload.jsx";
+import { CSVUpload } from "@/components/ui/csv-upload";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Plus, FileUp, FileDown, AlertCircle, Trash2 } from "lucide-react";
 import { ColumnDef, RowSelectionState } from "@tanstack/react-table"; // Import RowSelectionState
