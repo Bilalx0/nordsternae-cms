@@ -674,7 +674,7 @@ export default function DevelopmentEditPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {(developers as Array<{ id: number; urlSlug: string; title: string }>).map(
                             (developer) => (
                               <SelectItem key={developer.id} value={developer.urlSlug}>
@@ -703,7 +703,7 @@ export default function DevelopmentEditPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">None</SelectItem>
+                          <SelectItem value="none">None</SelectItem>
                           {(neighborhoods as Array<{ id: number; urlSlug: string; title: string }>).map(
                             (neighborhood) => (
                               <SelectItem key={neighborhood.id} value={neighborhood.urlSlug}>
