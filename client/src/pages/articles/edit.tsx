@@ -11,12 +11,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ArticleFormValues } from "@/types";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
   Card,
@@ -38,6 +38,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+// Zod schema for form validation
 const articleFormSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   slug: z.string().min(3, "Slug must be at least 3 characters"),
@@ -62,7 +63,7 @@ const defaultValues: ArticleFormValues = {
   author: "",
   category: "",
   excerpt: "",
-  datePublished: new Date().toLocaleDateString("en-CA"),
+  datePublished: new Date().toLocaleDateString("en-CA"), // YYYY-MM-DD format
   readingTime: 5,
   externalId: "",
   tileImage: "",
@@ -82,7 +83,7 @@ const articleCategories = [
   "Developer Insights",
   "Market Trends",
   "Dubai Regulations",
-  "Featured Properties"
+  "Featured Properties",
 ];
 
 export default function ArticleEditPage() {
@@ -94,7 +95,10 @@ export default function ArticleEditPage() {
 
   // Fetch article data if editing
   const { data: articleData, isLoading: isLoadingArticle } = useQuery({
-    queryKey: ['/api/articles', articleId],
+    queryKey: ["/api/articles", articleId],
+    queryFn: async () => {
+      return apiRequest("GET", `/api/articles/${articleId}`);
+    },
     enabled: !!articleId,
   });
 
@@ -106,17 +110,37 @@ export default function ArticleEditPage() {
 
   // Populate form when article data is loaded
   useEffect(() => {
-    if (articleData) {
-      const formData = { ...articleData };
-      
-      // Convert string numbers to actual numbers
-      if (typeof formData.readingTime === 'string') {
-        formData.readingTime = parseInt(formData.readingTime) || undefined;
-      }
-      
+    if (articleData && !isNewArticle) {
+      const formData: ArticleFormValues = {
+        title: articleData.title || "",
+        slug: articleData.slug || "",
+        author: articleData.author || "",
+        category: articleData.category || "",
+        excerpt: articleData.excerpt || "",
+        datePublished: articleData.datePublished
+          ? new Date(articleData.datePublished).toLocaleDateString("en-CA")
+          : "",
+        readingTime:
+          typeof articleData.readingTime === "string"
+            ? parseInt(articleData.readingTime) || 5
+            : articleData.readingTime || 5,
+        externalId: articleData.externalId || "",
+        tileImage: articleData.tileImage || "",
+        inlineImages: Array.isArray(articleData.inlineImages)
+          ? articleData.inlineImages
+          : articleData.inlineImages
+          ? [articleData.inlineImages]
+          : [],
+        bodyStart: articleData.bodyStart || "",
+        bodyEnd: articleData.bodyEnd || "",
+        isDisabled: !!articleData.isDisabled,
+        isFeatured: !!articleData.isFeatured,
+        superFeature: !!articleData.superFeature,
+      };
+
       form.reset(formData);
     }
-  }, [articleData, form]);
+  }, [articleData, form, isNewArticle]);
 
   // Generate slug from title
   const generateSlug = (title: string) => {
@@ -124,18 +148,19 @@ export default function ArticleEditPage() {
       .toLowerCase()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "-")
-      .replace(/-+/g, "-");
+      .replace(/-+/g, "-")
+      .trim();
   };
 
   // Update slug when title changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
-      if (name === 'title' && value.title && isNewArticle) {
+      if (name === "title" && value.title && isNewArticle) {
         const slug = generateSlug(value.title as string);
-        form.setValue('slug', slug);
+        form.setValue("slug", slug);
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form, isNewArticle]);
 
@@ -151,11 +176,11 @@ export default function ArticleEditPage() {
     onSuccess: () => {
       toast({
         title: isNewArticle ? "Article created" : "Article updated",
-        description: isNewArticle 
-          ? "The article has been successfully created." 
+        description: isNewArticle
+          ? "The article has been successfully created."
           : "The article has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/articles'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       navigate("/articles");
     },
     onError: (error) => {
@@ -165,7 +190,7 @@ export default function ArticleEditPage() {
         description: `Failed to ${isNewArticle ? "create" : "update"} article. Please try again.`,
         variant: "destructive",
       });
-    }
+    },
   });
 
   const onSubmit = (data: z.infer<typeof articleFormSchema>) => {
@@ -175,9 +200,11 @@ export default function ArticleEditPage() {
   return (
     <DashLayout
       title={isNewArticle ? "Add New Article" : "Edit Article"}
-      description={isNewArticle 
-        ? "Create a new blog article" 
-        : `Editing article: ${form.watch('title')}`}
+      description={
+        isNewArticle
+          ? "Create a new blog article"
+          : `Editing article: ${form.watch("title") || "Loading..."}`
+      }
     >
       <Button
         variant="outline"
@@ -188,9 +215,10 @@ export default function ArticleEditPage() {
         Back to Articles
       </Button>
 
-      {isLoadingArticle ? (
+      {isLoadingArticle && !isNewArticle ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading article data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -198,9 +226,7 @@ export default function ArticleEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Article Information</CardTitle>
-                <CardDescription>
-                  Enter the basic details for this article
-                </CardDescription>
+                <CardDescription>Enter the basic details for this article</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -210,13 +236,16 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Article Title</FormLabel>
                       <FormControl>
-                        <Input placeholder="Palm Jebel Ali vs. Palm Jumeirah: A Battle for Supremacy" {...field} />
+                        <Input
+                          placeholder="Palm Jebel Ali vs. Palm Jumeirah: A Battle for Supremacy"
+                          {...field}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -227,14 +256,12 @@ export default function ArticleEditPage() {
                         <FormControl>
                           <Input placeholder="palm-jebel-ali-vs-palm-jumeirah" {...field} />
                         </FormControl>
-                        <FormDescription>
-                          Used for the article URL (automatically generated)
-                        </FormDescription>
+                        <FormDescription>Used for the article URL (automatically generated)</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="externalId"
@@ -242,14 +269,18 @@ export default function ArticleEditPage() {
                       <FormItem>
                         <FormLabel>External ID</FormLabel>
                         <FormControl>
-                          <Input placeholder="Optional external reference ID" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Optional external reference ID"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -264,24 +295,21 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="category"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Category</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value || ""}
-                        >
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select a category" />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {articleCategories.map(category => (
+                            {articleCategories.map((category) => (
                               <SelectItem key={category} value={category}>
                                 {category}
                               </SelectItem>
@@ -292,7 +320,7 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="readingTime"
@@ -300,9 +328,9 @@ export default function ArticleEditPage() {
                       <FormItem>
                         <FormLabel>Reading Time (minutes)</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="5" 
+                          <Input
+                            type="number"
+                            placeholder="5"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -313,7 +341,7 @@ export default function ArticleEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <FormField
                   control={form.control}
                   name="datePublished"
@@ -321,17 +349,13 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Publication Date</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="date" 
-                          {...field}
-                          value={field.value || ""}
-                        />
+                        <Input type="date" {...field} value={field.value || ""} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="excerpt"
@@ -339,16 +363,14 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Excerpt</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Short summary of the article..." 
+                        <Textarea
+                          placeholder="Short summary of the article..."
                           rows={3}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        A brief excerpt that will appear in article listings
-                      </FormDescription>
+                      <FormDescription>A brief excerpt that will appear in article listings</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -359,9 +381,7 @@ export default function ArticleEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Article Content</CardTitle>
-                <CardDescription>
-                  Enter the main content for this article
-                </CardDescription>
+                <CardDescription>Enter the main content for this article</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -371,21 +391,19 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Body Start</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="First part of the article content..." 
+                        <Textarea
+                          placeholder="First part of the article content..."
                           rows={10}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        The beginning of the article content (supports HTML)
-                      </FormDescription>
+                      <FormDescription>The beginning of the article content (supports HTML)</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="bodyEnd"
@@ -393,16 +411,14 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Body End</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Second part of the article content..." 
+                        <Textarea
+                          placeholder="Second part of the article content..."
                           rows={10}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        The end of the article content (supports HTML)
-                      </FormDescription>
+                      <FormDescription>The end of the article content (supports HTML)</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -413,9 +429,7 @@ export default function ArticleEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Images</CardTitle>
-                <CardDescription>
-                  Upload images for this article
-                </CardDescription>
+                <CardDescription>Upload images for this article</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -425,16 +439,18 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Tile Image URL</FormLabel>
                       <FormControl>
-                        <Input placeholder="https://example.com/image.jpg" {...field} value={field.value || ""} />
+                        <Input
+                          placeholder="https://example.com/image.jpg"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
-                      <FormDescription>
-                        The main thumbnail image for this article
-                      </FormDescription>
+                      <FormDescription>The main thumbnail image for this article</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="inlineImages"
@@ -451,9 +467,7 @@ export default function ArticleEditPage() {
                           maxFiles={10}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Images that will be used within the article content
-                      </FormDescription>
+                      <FormDescription>Images that will be used within the article content</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -464,9 +478,7 @@ export default function ArticleEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Publication Settings</CardTitle>
-                <CardDescription>
-                  Control how this article appears on the website
-                </CardDescription>
+                <CardDescription>Control how this article appears on the website</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -477,20 +489,15 @@ export default function ArticleEditPage() {
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
                           <FormLabel className="text-base">Featured Article</FormLabel>
-                          <FormDescription>
-                            Highlight this article on the blog page
-                          </FormDescription>
+                          <FormDescription>Highlight this article on the blog page</FormDescription>
                         </div>
                         <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="superFeature"
@@ -498,20 +505,15 @@ export default function ArticleEditPage() {
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
                           <FormLabel className="text-base">Super Feature</FormLabel>
-                          <FormDescription>
-                            Display as a large featured article on the home page
-                          </FormDescription>
+                          <FormDescription>Display as a large featured article on the home page</FormDescription>
                         </div>
                         <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="isDisabled"
@@ -519,15 +521,10 @@ export default function ArticleEditPage() {
                       <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                         <div className="space-y-0.5">
                           <FormLabel className="text-base">Disable Article</FormLabel>
-                          <FormDescription>
-                            Hide this article from the website
-                          </FormDescription>
+                          <FormDescription>Hide this article from the website</FormDescription>
                         </div>
                         <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -545,7 +542,7 @@ export default function ArticleEditPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"

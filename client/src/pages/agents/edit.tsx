@@ -31,26 +31,6 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
-// Static agent data
-const staticAgentData = {
-  id: 1,
-  jobTitle: "Property Advisor",
-  languages: "English",
-  licenseNumber: "",
-  location: "Head Office",
-  name: "Asad",
-  headShot:
-    "data:image/webp;base64,UklGRvppAQBXRUJQVlA4WAoAAAAwAAAAaQIAPAMASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAAB",
-  photo: "",
-  email: "asadaliabbasi787@gmail.com",
-  phone: "03705764856",
-  introduction: "",
-  linkedin: "https://www.linkedin.com/asad1234",
-  experience: 0,
-  updatedAt: "2025-07-15T10:17:12.795Z",
-  createdAt: "2025-07-15T10:17:12.795Z",
-};
-
 // Zod schema for form validation
 const agentFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
@@ -93,9 +73,6 @@ export default function AgentEditPage() {
   const { data: agentData, isLoading: isLoadingAgent } = useQuery({
     queryKey: ["/api/agents", agentId],
     queryFn: async () => {
-      if (agentId === 1) {
-        return staticAgentData; // Use static data for id: 1
-      }
       return apiRequest("GET", `/api/agents/${agentId}`);
     },
     enabled: !!agentId,
