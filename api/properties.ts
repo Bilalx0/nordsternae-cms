@@ -44,59 +44,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  // Extract id from URL
-  // This logic is for path-based IDs (e.g., /api/properties/123)
-  // Query parameters are handled separately via req.query
-  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'properties');
-  const id = urlParts[0]; // This 'id' is from the path, not query params
+  // --- START OF MODIFIED ID EXTRACTION ---
+  // Get the path part of the URL, excluding the query string
+  const pathWithoutQuery = req.url.split('?')[0];
+
+  // Extract id from URL segments after splitting and filtering
+  // This correctly isolates path segments like '123' from '/api/properties/123'
+  const urlParts = pathWithoutQuery.split('/').filter(part => part && part !== 'api' && part !== 'properties');
+  const id = urlParts[0]; // This will be the ID, or undefined if no ID in path
+
   const hasIdInPath = !!id && typeof id === 'string';
   const propertyIdFromPath = hasIdInPath ? parseInt(id) : null;
 
-  if (hasIdInPath && propertyIdFromPath !== null && isNaN(propertyIdFromPath)) {
+  if (hasIdInPath && (propertyIdFromPath === null || isNaN(propertyIdFromPath))) {
     console.log('Invalid ID in path: not a number after parsing:', id);
     return res.status(400).json({ message: 'Invalid ID in path' });
   }
+  // --- END OF MODIFIED ID EXTRACTION ---
 
   console.log('Parsed propertyId from path:', propertyIdFromPath);
 
   try {
     // Base route: /api/properties (handles GET all and GET with query parameters, POST)
-    if (!hasIdInPath) {
+    if (!hasIdInPath) { // This condition will now correctly be true for /api/properties?reference=NS2767
       if (req.method === 'GET') {
         console.log('Fetching properties with query filters (if any):', req.query);
-        // Get all properties first
         let properties = await storage.getProperties();
 
-        // Apply filters based on query parameters
-        // req.query contains all query parameters as key-value pairs
-        // Example: /api/properties?reference=REF123&propertyType=villa
         for (const key in req.query) {
           const queryValue = req.query[key];
 
-          // Ensure the queryValue is a string for filtering, or handle arrays if applicable
           if (typeof queryValue === 'string') {
             const lowerCaseQueryValue = queryValue.toLowerCase();
 
             properties = properties.filter((property: any) => {
-              const propertyValue = property[key]; // Access the property's field value
-
-              // Basic case-insensitive string matching
+              const propertyValue = property[key];
               if (typeof propertyValue === 'string') {
                 return propertyValue.toLowerCase().includes(lowerCaseQueryValue);
               }
-              // If it's a number, convert query to number for comparison
               if (typeof propertyValue === 'number' && !isNaN(parseFloat(queryValue))) {
                 return propertyValue === parseFloat(queryValue);
               }
-              // Handle arrays of strings (e.g., 'amenities')
               if (Array.isArray(propertyValue) && propertyValue.every(item => typeof item === 'string')) {
                 return propertyValue.some(item => item.toLowerCase().includes(lowerCaseQueryValue));
               }
-              // You might need more specific logic for nested objects or complex types
-              return false; // Exclude if type not handled or no match
+              return false;
             });
           }
-          // Add more complex filtering logic here if needed (e.g., for range filters like minPrice, maxPrice)
         }
 
         console.log('Retrieved properties count after filtering:', properties.length);
@@ -152,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : 'Unknown error',
       storageError,
       timestamp: new Date().toISOString(),
-      propertyId: propertyIdFromPath // Use propertyIdFromPath for consistency
+      propertyId: propertyIdFromPath
     });
   }
   console.log('=== PROPERTIES API HANDLER END ===');

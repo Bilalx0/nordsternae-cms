@@ -14,27 +14,86 @@ const XML_PARSER = new xml2js.Parser({
   mergeAttrs: true,
 });
 
-// Property type mapping
+// Property type mapping with expanded types
 const PROPERTY_TYPE_MAP: Record<string, string> = {
   'AP': 'Apartment',
-  'VH': 'Villa', 
-  'TH': 'Townhouse',
+  'BU': 'Bulk Units',
+  'BW': 'Bungalow',
+  'CD': 'Compound',
+  'DX': 'Duplex',
+  'FA': 'Factory',
+  'FM': 'Farm',
+  'FF': 'Full Floor',
+  'HA': 'Hotel Apartment',
+  'HF': 'Half Floor',
+  'LC': 'Labor Camp',
+  'LP': 'Land/Plot',
+  'OF': 'Office Space',
+  'BC': 'Business Centre',
   'PH': 'Penthouse',
-  'OF': 'Office',
   'RE': 'Retail',
-  'WH': 'Warehouse',
-  'PL': 'Plot',
-  'FA': 'Factory'
+  'RT': 'Restaurant',
+  'ST': 'Storage',
+  'TH': 'Townhouse',
+  'VH': 'Villa/House',
+  'SA': 'Staff Accommodation',
+  'WB': 'Whole Building',
+  'SH': 'Shop',
+  'SR': 'Showroom',
+  'CW': 'Co-working Space',
+  'WH': 'Warehouse'
 };
 
-const COMMERCIAL_TYPES = new Set(['OF', 'RE', 'WH', 'FA']);
+// Commercial property types
+const COMMERCIAL_TYPES = new Set([
+  'OF', 'BC', 'RE', 'RT', 'ST', 'WB', 'SH', 'SR', 'CW', 'WH', 'FA', 'FF', 'HF'
+]);
 
-// Default amenities
-const DEFAULT_AMENITIES = {
-  commercial: 'Security,Maintenance,Lobby in Building',
-  apartment: 'Balcony,Built in wardrobes,Central air conditioning,Covered parking',
-  villa: 'Private Garden,Built in wardrobes,Central air conditioning,Covered parking'
+// Private amenities mapping
+const PRIVATE_AMENITIES_MAP: Record<string, string> = {
+  'AC': 'Central A/C & Heating',
+  'BA': 'Balcony',
+  'BK': 'Built-in Kitchen Appliances',
+  'BL': 'View of Landmark',
+  'BW': 'Built-in Wardrobes',
+  'CP': 'Covered Parking',
+  'CS': 'Concierge Service',
+  'LB': 'Lobby in Building',
+  'MR': 'Maid\'s Room',
+  'MS': 'Maid Service',
+  'PA': 'Pets Allowed',
+  'PG': 'Private Garden',
+  'PJ': 'Private Jacuzzi',
+  'PP': 'Private Pool',
+  'PY': 'Private Gym',
+  'VC': 'Vastu-compliant',
+  'SE': 'Security',
+  'SP': 'Shared Pool',
+  'SS': 'Shared Spa',
+  'ST': 'Study',
+  'SY': 'Shared Gym',
+  'VW': 'View of Water',
+  'WC': 'Walk-in Closet',
+  'CO': 'Children\'s Pool',
+  'PR': 'Children\'s Play Area',
+  'BR': 'Barbecue Area'
 };
+
+// Commercial amenities mapping
+const COMMERCIAL_AMENITIES_MAP: Record<string, string> = {
+  'CR': 'Conference Room',
+  'AN': 'Available Networked',
+  'DN': 'Dining in building',
+  'LB': 'Lobby in Building',
+  'SP': 'Shared Pool',
+  'SY': 'Shared Gym',
+  'CP': 'Covered Parking',
+  'VC': 'Vastu-compliant',
+  'PN': 'Pantry',
+  'MZ': 'Mezzanine'
+};
+
+// Removed default amenities - will use empty string if not provided in XML
 
 /**
  * Safely extract first array element or value
@@ -55,6 +114,48 @@ function parseIntSafe(value: any): number | null {
 }
 
 /**
+ * Parse amenities from XML codes to readable format
+ */
+function parseAmenities(amenitiesStr: string, isCommercial: boolean): string {
+  if (!amenitiesStr) return '';
+  
+  const amenityMap = isCommercial ? COMMERCIAL_AMENITIES_MAP : PRIVATE_AMENITIES_MAP;
+  const codes = amenitiesStr.split(',').map(code => code.trim());
+  
+  const mappedAmenities = codes
+    .map(code => amenityMap[code] || code)
+    .filter(amenity => amenity);
+  
+  return mappedAmenities.join(',');
+}
+
+/**
+ * Fix URL by ensuring proper slashes
+ */
+function fixImageUrl(url: string): string {
+  if (!url) return '';
+  
+  // Remove any quotes, backticks, or unwanted characters
+  let cleanUrl = url.trim().replace(/[`'"]/g, '');
+  
+  // If it starts with https: but missing //, add them
+  if (cleanUrl.startsWith('https:') && !cleanUrl.startsWith('https://')) {
+    cleanUrl = cleanUrl.replace('https:', 'https://');
+  }
+  
+  // If it starts with http: but missing //, add them
+  if (cleanUrl.startsWith('http:') && !cleanUrl.startsWith('http://')) {
+    cleanUrl = cleanUrl.replace('http:', 'http://');
+  }
+  
+  // Fix missing slashes after domain
+  // Pattern: https://domain.compath -> https://domain.com/path
+  cleanUrl = cleanUrl.replace(/^(https?:\/\/[^\/]+)([^\/])/, '$1/$2');
+  
+  return cleanUrl;
+}
+
+/**
  * Map XML property to schema
  */
 function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
@@ -69,7 +170,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       price = parseInt(rawPrice, 10) || 0;
     }
 
-    // Image extraction
+    // Image extraction with proper URL fixing
     let images: string[] = [];
     const photoData = Array.isArray(xmlProperty.photo) 
       ? (xmlProperty.photo.length > 0 ? xmlProperty.photo[0] : null)
@@ -79,7 +180,8 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       const rawUrls = Array.isArray(photoData.url) ? photoData.url : [photoData.url];
       images = rawUrls
         .filter((url: string) => url && typeof url === 'string')
-        .map((url: string) => url.trim().replace(/[`'"\\/]/g, ''));
+        .map((url: string) => fixImageUrl(url))
+        .filter((url: string) => url.length > 0);
     }
 
     // Agent extraction
@@ -92,26 +194,22 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       }];
     }
 
-    // Amenities determination
+    // Property type and commercial determination
     const propertyTypeCode = extractValue(xmlProperty.property_type) || 'AP';
     const isCommercial = COMMERCIAL_TYPES.has(propertyTypeCode);
-    let amenities = extractValue(xmlProperty.private_amenities);
+
+    // Amenities processing - only use what's provided in XML
+    let amenities = '';
+    const rawAmenities = extractValue(xmlProperty.private_amenities) || extractValue(xmlProperty.commercial_amenities);
     
-    if (!amenities) {
-      if (isCommercial) {
-        amenities = DEFAULT_AMENITIES.commercial;
-      } else if (propertyTypeCode === 'VH' || propertyTypeCode === 'TH') {
-        amenities = DEFAULT_AMENITIES.villa;
-      } else {
-        amenities = DEFAULT_AMENITIES.apartment;
-      }
+    if (rawAmenities) {
+      amenities = parseAmenities(rawAmenities, isCommercial);
     }
+    // If no amenities in XML, leave empty string
 
     // Furnished status
     const furnishedValue = extractValue(xmlProperty.furnished)?.toLowerCase() || '';
-    // Normalize Furnished to boolean (true for "yes" or "partly", false for "no" or empty)
-    const Furnished = furnishedValue === 'yes' || furnishedValue === 'partly' ? true : false;
-    // isFitted is true if the property is partly furnished
+    const isFurnished = furnishedValue === 'yes' || furnishedValue === 'partly';
     const isFitted = furnishedValue.includes('partly');
 
     return {
@@ -136,7 +234,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
       amenities,
       isFeatured: false,
       isFitted,
-      isFurnished: Furnished,
+      isFurnished,
       lifestyle: '',
       permit: extractValue(xmlProperty.permit_number) || null,
       brochure: '',
