@@ -130,13 +130,16 @@ function parseAmenities(amenitiesStr: string, isCommercial: boolean): string {
 }
 
 /**
- * Fix URL by ensuring proper slashes
+ * Fix URL by ensuring proper slashes and fixing domain corruption
  */
 function fixImageUrl(url: string): string {
   if (!url) return '';
   
   // Remove any quotes, backticks, or unwanted characters
   let cleanUrl = url.trim().replace(/[`'"]/g, '');
+  
+  // Fix the specific issue where zoho.nordstern.ae becomes zoho.nordstern.a/e
+  cleanUrl = cleanUrl.replace(/zoho\.nordstern\.a\/e/g, 'zoho.nordstern.ae');
   
   // If it starts with https: but missing //, add them
   if (cleanUrl.startsWith('https:') && !cleanUrl.startsWith('https://')) {
@@ -148,9 +151,11 @@ function fixImageUrl(url: string): string {
     cleanUrl = cleanUrl.replace('http:', 'http://');
   }
   
-  // Fix missing slashes after domain
+  // Fix missing slashes after domain (but avoid breaking already correct URLs)
   // Pattern: https://domain.compath -> https://domain.com/path
-  cleanUrl = cleanUrl.replace(/^(https?:\/\/[^\/]+)([^\/])/, '$1/$2');
+  if (cleanUrl.match(/^https?:\/\/[^\/]+[^\/]$/)) {
+    cleanUrl = cleanUrl.replace(/^(https?:\/\/[^\/]+)([^\/])/, '$1/$2');
+  }
   
   return cleanUrl;
 }
