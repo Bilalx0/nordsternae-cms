@@ -6,7 +6,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock } from "lucide-react";
+import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock, Eye, EyeOff, Star } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
 import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
 import { CSVUpload } from "@/components/ui/csv-upload";
@@ -40,7 +40,8 @@ interface Property {
   price: number;
   currency: string;
   propertyStatus: string;
-  isFurnished: boolean; // Updated to isFurnished
+  isDisabled: boolean; // Updated to use isDisabled for visibility
+  isFeatured: boolean; // Added isFeatured
   agent?: {
     id: string;
     name: string;
@@ -483,14 +484,41 @@ export default function PropertiesPage() {
       },
     },
     {
-      id: "isFurnished",
-      header: "Furnished",
-      accessorKey: "isFurnished",
-      cell: ({ row }) => (
-        <Badge variant={row.original.isFurnished ? "default" : "secondary"}>
-          {row.original.isFurnished ? "Furnished" : "Unfurnished"}
-        </Badge>
-      ),
+      id: "isDisabled",
+      header: "Visibility",
+      accessorKey: "isDisabled",
+      cell: ({ row }) => {
+        const isVisible = !row.original.isDisabled;
+        return (
+          <div className="flex items-center gap-2">
+            {isVisible ? (
+              <Eye className="h-4 w-4 text-green-600" />
+            ) : (
+              <EyeOff className="h-4 w-4 text-red-600" />
+            )}
+            <Badge variant={isVisible ? "default" : "secondary"}>
+              {isVisible ? "Visible" : "Hidden"}
+            </Badge>
+          </div>
+        );
+      },
+      enableSorting: true,
+    },
+    {
+      id: "isFeatured",
+      header: "Featured",
+      accessorKey: "isFeatured",
+      cell: ({ row }) => {
+        const isFeatured = row.original.isFeatured;
+        return (
+          <div className="flex items-center gap-2">
+            {isFeatured && <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />}
+            <Badge variant={isFeatured ? "default" : "secondary"}>
+              {isFeatured ? "Featured" : "Regular"}
+            </Badge>
+          </div>
+        );
+      },
       enableSorting: true,
     },
   ];
@@ -525,11 +553,19 @@ export default function PropertiesPage() {
       ]
     },
     {
-      id: "isFurnished",
-      title: "Furnished",
+      id: "isDisabled",
+      title: "Visibility",
       options: [
-        { label: "Furnished", value: true },
-        { label: "Unfurnished", value: false }
+        { label: "Visible", value: false },
+        { label: "Hidden", value: true }
+      ]
+    },
+    {
+      id: "isFeatured",
+      title: "Featured",
+      options: [
+        { label: "Featured", value: true },
+        { label: "Regular", value: false }
       ]
     }
   ];
