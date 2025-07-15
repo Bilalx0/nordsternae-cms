@@ -11,12 +11,12 @@ import { apiRequest, queryClient } from "@/lib/queryClient.js";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast.js";
 import { DevelopmentFormValues } from "@/types/index.js";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select.jsx";
 import {
   Card,
@@ -89,25 +89,34 @@ const defaultValues: DevelopmentFormValues = {
 };
 
 export default function DevelopmentEditPage() {
-  const [_, navigate] = useLocation(); // Get navigate function
-  const [match, params] = useRoute("/developments/:id"); // Get route params
+  const [_, navigate] = useLocation();
+  const [match, params] = useRoute("/developments/:id");
   const { toast } = useToast();
-  const isNewDevelopment = !params?.id || params.id === "new";
-  const developmentId = isNewDevelopment ? null : parseInt(params.id);
+  const isNewDevelopment = !match || params?.id === "new";
+  const developmentId = isNewDevelopment ? null : parseInt(params?.id || "");
 
   // Fetch developers for the dropdown
   const { data: developers = [] } = useQuery({
-    queryKey: ['/api/developers'],
+    queryKey: ["/api/developers"],
+    queryFn: async () => {
+      return apiRequest("GET", "/api/developers");
+    },
   });
 
   // Fetch neighborhoods for the dropdown
   const { data: neighborhoods = [] } = useQuery({
-    queryKey: ['/api/neighborhoods'],
+    queryKey: ["/api/neighborhoods"],
+    queryFn: async () => {
+      return apiRequest("GET", "/api/neighborhoods");
+    },
   });
 
   // Fetch development data if editing
   const { data: developmentData, isLoading: isLoadingDevelopment } = useQuery({
-    queryKey: ['/api/developments', developmentId],
+    queryKey: ["/api/developments", developmentId],
+    queryFn: async () => {
+      return apiRequest("GET", `/api/developments/${developmentId}`);
+    },
     enabled: !!developmentId,
   });
 
@@ -119,35 +128,60 @@ export default function DevelopmentEditPage() {
 
   // Populate form when development data is loaded
   useEffect(() => {
-    if (developmentData) {
-      const formData = { ...developmentData };
-      
-      // Convert string numbers to actual numbers
-      if (typeof formData.price === 'string') {
-        formData.price = parseFloat(formData.price) || undefined;
-      }
-      if (typeof formData.minBedrooms === 'string') {
-        formData.minBedrooms = parseInt(formData.minBedrooms) || undefined;
-      }
-      if (typeof formData.maxBedrooms === 'string') {
-        formData.maxBedrooms = parseInt(formData.maxBedrooms) || undefined;
-      }
-      if (typeof formData.floors === 'string') {
-        formData.floors = parseInt(formData.floors) || undefined;
-      }
-      if (typeof formData.totalUnits === 'string') {
-        formData.totalUnits = parseInt(formData.totalUnits) || undefined;
-      }
-      if (typeof formData.minArea === 'string') {
-        formData.minArea = parseInt(formData.minArea) || undefined;
-      }
-      if (typeof formData.maxArea === 'string') {
-        formData.maxArea = parseInt(formData.maxArea) || undefined;
-      }
-      
+    if (developmentData && !isNewDevelopment) {
+      const formData: DevelopmentFormValues = {
+        title: developmentData.title || "",
+        description: developmentData.description || "",
+        area: developmentData.area || "Dubai",
+        propertyType: developmentData.propertyType || "",
+        propertyDescription: developmentData.propertyDescription || "",
+        price:
+          typeof developmentData.price === "string"
+            ? parseFloat(developmentData.price) || undefined
+            : developmentData.price || undefined,
+        urlSlug: developmentData.urlSlug || "",
+        images: Array.isArray(developmentData.images)
+          ? developmentData.images
+          : developmentData.images
+          ? [developmentData.images]
+          : [],
+        maxBedrooms:
+          typeof developmentData.maxBedrooms === "string"
+            ? parseInt(developmentData.maxBedrooms) || undefined
+            : developmentData.maxBedrooms || undefined,
+        minBedrooms:
+          typeof developmentData.minBedrooms === "string"
+            ? parseInt(developmentData.minBedrooms) || undefined
+            : developmentData.minBedrooms || undefined,
+        floors:
+          typeof developmentData.floors === "string"
+            ? parseInt(developmentData.floors) || undefined
+            : developmentData.floors || undefined,
+        totalUnits:
+          typeof developmentData.totalUnits === "string"
+            ? parseInt(developmentData.totalUnits) || undefined
+            : developmentData.totalUnits || undefined,
+        minArea:
+          typeof developmentData.minArea === "string"
+            ? parseInt(developmentData.minArea) || undefined
+            : developmentData.minArea || undefined,
+        maxArea:
+          typeof developmentData.maxArea === "string"
+            ? parseInt(developmentData.maxArea) || undefined
+            : developmentData.maxArea || undefined,
+        address: developmentData.address || "",
+        addressDescription: developmentData.addressDescription || "",
+        currency: developmentData.currency || "AED",
+        amenities: developmentData.amenities || "",
+        subtitle: developmentData.subtitle || "",
+        developerLink: developmentData.developerLink || "",
+        neighbourhoodLink: developmentData.neighbourhoodLink || "",
+        featureOnHomepage: !!developmentData.featureOnHomepage,
+      };
+
       form.reset(formData);
     }
-  }, [developmentData, form]);
+  }, [developmentData, form, isNewDevelopment]);
 
   // Generate URL slug from title
   const generateSlug = (title: string) => {
@@ -155,18 +189,19 @@ export default function DevelopmentEditPage() {
       .toLowerCase()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "_")
-      .replace(/-+/g, "_");
+      .replace(/-+/g, "_")
+      .trim();
   };
 
   // Update URL slug when title changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
-      if (name === 'title' && value.title && isNewDevelopment) {
+      if (name === "title" && value.title && isNewDevelopment) {
         const slug = generateSlug(value.title as string);
-        form.setValue('urlSlug', slug);
+        form.setValue("urlSlug", slug);
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form, isNewDevelopment]);
 
@@ -182,11 +217,11 @@ export default function DevelopmentEditPage() {
     onSuccess: () => {
       toast({
         title: isNewDevelopment ? "Development created" : "Development updated",
-        description: isNewDevelopment 
-          ? "The development has been successfully created." 
+        description: isNewDevelopment
+          ? "The development has been successfully created."
           : "The development has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/developments'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/developments"] });
       navigate("/developments");
     },
     onError: (error) => {
@@ -196,7 +231,7 @@ export default function DevelopmentEditPage() {
         description: `Failed to ${isNewDevelopment ? "create" : "update"} development. Please try again.`,
         variant: "destructive",
       });
-    }
+    },
   });
 
   const onSubmit = (data: z.infer<typeof developmentFormSchema>) => {
@@ -206,9 +241,11 @@ export default function DevelopmentEditPage() {
   return (
     <DashLayout
       title={isNewDevelopment ? "Add New Development" : "Edit Development"}
-      description={isNewDevelopment 
-        ? "Create a new development project" 
-        : `Editing development: ${form.watch('title')}`}
+      description={
+        isNewDevelopment
+          ? "Create a new development project"
+          : `Editing development: ${form.watch("title") || "Loading..."}`
+      }
     >
       <Button
         variant="outline"
@@ -219,9 +256,10 @@ export default function DevelopmentEditPage() {
         Back to Developments
       </Button>
 
-      {isLoadingDevelopment ? (
+      {isLoadingDevelopment && !isNewDevelopment ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading development data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -229,9 +267,7 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
-                <CardDescription>
-                  Enter the basic details for this development
-                </CardDescription>
+                <CardDescription>Enter the basic details for this development</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -247,7 +283,7 @@ export default function DevelopmentEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="subtitle"
@@ -257,14 +293,12 @@ export default function DevelopmentEditPage() {
                       <FormControl>
                         <Input placeholder="By Danube Properties" {...field} value={field.value || ""} />
                       </FormControl>
-                      <FormDescription>
-                        A brief tagline or subtitle for the development
-                      </FormDescription>
+                      <FormDescription>A brief tagline or subtitle for the development</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -275,14 +309,12 @@ export default function DevelopmentEditPage() {
                         <FormControl>
                           <Input placeholder="bayz_101" {...field} />
                         </FormControl>
-                        <FormDescription>
-                          Used for the website URL (automatically generated)
-                        </FormDescription>
+                        <FormDescription>Used for the website URL (automatically generated)</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="area"
@@ -297,7 +329,7 @@ export default function DevelopmentEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -305,8 +337,8 @@ export default function DevelopmentEditPage() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter development description..." 
+                        <Textarea
+                          placeholder="Enter development description..."
                           rows={6}
                           {...field}
                           value={field.value || ""}
@@ -322,9 +354,7 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Property Details</CardTitle>
-                <CardDescription>
-                  Enter information about the properties in this development
-                </CardDescription>
+                <CardDescription>Enter information about the properties in this development</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -341,7 +371,7 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="propertyDescription"
@@ -356,7 +386,7 @@ export default function DevelopmentEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -365,9 +395,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Starting Price</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="1750000" 
+                          <Input
+                            type="number"
+                            placeholder="1750000"
                             {...field}
                             onChange={(e) => field.onChange(parseFloat(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -377,17 +407,14 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="currency"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Currency</FormLabel>
-                        <Select 
-                          onValueChange={field.onChange} 
-                          defaultValue={field.value || "AED"}
-                        >
+                        <Select onValueChange={field.onChange} value={field.value || "AED"}>
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select currency" />
@@ -403,7 +430,7 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="totalUnits"
@@ -411,9 +438,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Total Units</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="500" 
+                          <Input
+                            type="number"
+                            placeholder="500"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -424,7 +451,7 @@ export default function DevelopmentEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
@@ -433,9 +460,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Min. Bedrooms</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="1" 
+                          <Input
+                            type="number"
+                            placeholder="1"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -445,7 +472,7 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="maxBedrooms"
@@ -453,9 +480,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Max. Bedrooms</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="4" 
+                          <Input
+                            type="number"
+                            placeholder="4"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -465,7 +492,7 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="minArea"
@@ -473,9 +500,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Min. Area (sq ft)</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="800" 
+                          <Input
+                            type="number"
+                            placeholder="800"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -485,7 +512,7 @@ export default function DevelopmentEditPage() {
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="maxArea"
@@ -493,9 +520,9 @@ export default function DevelopmentEditPage() {
                       <FormItem>
                         <FormLabel>Max. Area (sq ft)</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="2500" 
+                          <Input
+                            type="number"
+                            placeholder="2500"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
@@ -506,7 +533,7 @@ export default function DevelopmentEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <FormField
                   control={form.control}
                   name="floors"
@@ -514,9 +541,9 @@ export default function DevelopmentEditPage() {
                     <FormItem>
                       <FormLabel>Number of Floors</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="50" 
+                        <Input
+                          type="number"
+                          placeholder="50"
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                           value={field.value || ""}
@@ -532,9 +559,7 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Location</CardTitle>
-                <CardDescription>
-                  Enter location details for this development
-                </CardDescription>
+                <CardDescription>Enter location details for this development</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -550,7 +575,7 @@ export default function DevelopmentEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="addressDescription"
@@ -558,8 +583,8 @@ export default function DevelopmentEditPage() {
                     <FormItem>
                       <FormLabel>Address Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Additional location details..." 
+                        <Textarea
+                          placeholder="Additional location details..."
                           rows={3}
                           {...field}
                           value={field.value || ""}
@@ -575,9 +600,7 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Amenities</CardTitle>
-                <CardDescription>
-                  Enter amenities available in this development
-                </CardDescription>
+                <CardDescription>Enter amenities available in this development</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -587,16 +610,14 @@ export default function DevelopmentEditPage() {
                     <FormItem>
                       <FormLabel>Amenities</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Walk-in wardrobes, Secure parking, Concierge Service..." 
+                        <Textarea
+                          placeholder="Walk-in wardrobes, Secure parking, Concierge Service..."
                           rows={4}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Enter amenities as a comma-separated list
-                      </FormDescription>
+                      <FormDescription>Enter amenities as a comma-separated list</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -607,9 +628,7 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Media</CardTitle>
-                <CardDescription>
-                  Upload images for this development
-                </CardDescription>
+                <CardDescription>Upload images for this development</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -628,9 +647,7 @@ export default function DevelopmentEditPage() {
                           maxFiles={10}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Upload up to 10 images of the development
-                      </FormDescription>
+                      <FormDescription>Upload up to 10 images of the development</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -641,83 +658,73 @@ export default function DevelopmentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Related Links</CardTitle>
-                <CardDescription>
-                  Connect this development to related entities
-                </CardDescription>
+                <CardDescription>Connect this development to related entities</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-              <FormField
-  control={form.control}
-  name="developerLink"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Developer</FormLabel>
-      <Select 
-        onValueChange={field.onChange}
-        value={field.value || "none"} // Default to "none" if field.value is undefined
-      >
-        <FormControl>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a developer" />
-          </SelectTrigger>
-        </FormControl>
-        <SelectContent>
-          <SelectItem value="none">None</SelectItem> {/* Use "none" instead of "" */}
-          {(developers as Array<{ id: number; urlSlug: string; title: string }>).map((developer) => (
-            <SelectItem key={developer.id} value={developer.urlSlug}>
-              {developer.title}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <FormDescription>
-        Link to the developer of this project
-      </FormDescription>
-      <FormMessage />
-    </FormItem>
-  )}
-/>
+                <FormField
+                  control={form.control}
+                  name="developerLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Developer</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a developer" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {(developers as Array<{ id: number; urlSlug: string; title: string }>).map(
+                            (developer) => (
+                              <SelectItem key={developer.id} value={developer.urlSlug}>
+                                {developer.title}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Link to the developer of this project</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-<FormField
-  control={form.control}
-  name="neighbourhoodLink"
-  render={({ field }) => (
-    <FormItem>
-      <FormLabel>Neighborhood</FormLabel>
-      <Select 
-        onValueChange={field.onChange}
-        value={field.value || "none"} // Default to "none" if field.value is undefined
-      >
-        <FormControl>
-          <SelectTrigger>
-            <SelectValue placeholder="Select a neighborhood" />
-          </SelectTrigger>
-        </FormControl>
-        <SelectContent>
-          <SelectItem value="none">None</SelectItem> {/* Use "none" instead of "" */}
-          {(neighborhoods as Array<{ id: number; urlSlug: string; title: string }>).map((neighborhood) => (
-            <SelectItem key={neighborhood.id} value={neighborhood.urlSlug}>
-              {neighborhood.title}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <FormDescription>
-        Link to the neighborhood where this development is located
-      </FormDescription>
-      <FormMessage />
-    </FormItem>
-  )}
-/>
+                <FormField
+                  control={form.control}
+                  name="neighbourhoodLink"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Neighborhood</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || ""}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a neighborhood" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {(neighborhoods as Array<{ id: number; urlSlug: string; title: string }>).map(
+                            (neighborhood) => (
+                              <SelectItem key={neighborhood.id} value={neighborhood.urlSlug}>
+                                {neighborhood.title}
+                              </SelectItem>
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>Link to the neighborhood where this development is located</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
                 <CardTitle>Visibility</CardTitle>
-                <CardDescription>
-                  Control the visibility and promotion of this development
-                </CardDescription>
+                <CardDescription>Control the visibility and promotion of this development</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -727,15 +734,10 @@ export default function DevelopmentEditPage() {
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                       <div className="space-y-0.5">
                         <FormLabel className="text-base">Featured Development</FormLabel>
-                        <FormDescription>
-                          Feature this development on the homepage
-                        </FormDescription>
+                        <FormDescription>Feature this development on the homepage</FormDescription>
                       </div>
                       <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -752,7 +754,7 @@ export default function DevelopmentEditPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"

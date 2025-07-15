@@ -82,7 +82,10 @@ export default function NeighborhoodEditPage() {
 
   // Fetch neighborhood data if editing
   const { data: neighborhoodData, isLoading: isLoadingNeighborhood } = useQuery({
-    queryKey: ['/api/neighborhoods', neighborhoodId],
+    queryKey: ["/api/neighborhoods", neighborhoodId],
+    queryFn: async () => {
+      return apiRequest("GET", `/api/neighborhoods/${neighborhoodId}`);
+    },
     enabled: !!neighborhoodId,
   });
 
@@ -94,17 +97,38 @@ export default function NeighborhoodEditPage() {
 
   // Populate form when neighborhood data is loaded
   useEffect(() => {
-    if (neighborhoodData) {
-      const formData = { ...neighborhoodData };
-      
-      // Convert string numbers to actual numbers
-      if (typeof formData.availableProperties === 'string') {
-        formData.availableProperties = parseInt(formData.availableProperties) || undefined;
-      }
-      
+    if (neighborhoodData && !isNewNeighborhood) {
+      const formData: NeighborhoodFormValues = {
+        urlSlug: neighborhoodData.urlSlug || "",
+        title: neighborhoodData.title || "",
+        subtitle: neighborhoodData.subtitle || "",
+        region: neighborhoodData.region || "Dubai",
+        bannerImage: neighborhoodData.bannerImage || "",
+        description: neighborhoodData.description || "",
+        locationAttributes: neighborhoodData.locationAttributes || "",
+        address: neighborhoodData.address || "",
+        availableProperties:
+          typeof neighborhoodData.availableProperties === "string"
+            ? parseInt(neighborhoodData.availableProperties) || undefined
+            : neighborhoodData.availableProperties || undefined,
+        images: Array.isArray(neighborhoodData.images)
+          ? neighborhoodData.images
+          : neighborhoodData.images
+          ? [neighborhoodData.images]
+          : [],
+        neighbourImage: neighborhoodData.neighbourImage || "",
+        neighboursText: neighborhoodData.neighboursText || "",
+        propertyOffers: neighborhoodData.propertyOffers || "",
+        subtitleBlurb: neighborhoodData.subtitleBlurb || "",
+        neighbourhoodDetails: neighborhoodData.neighbourhoodDetails || "",
+        neighbourhoodExpectation: neighborhoodData.neighbourhoodExpectation || "",
+        brochure: neighborhoodData.brochure || "",
+        showOnFooter: !!neighborhoodData.showOnFooter,
+      };
+
       form.reset(formData);
     }
-  }, [neighborhoodData, form]);
+  }, [neighborhoodData, form, isNewNeighborhood]);
 
   // Generate URL slug from title
   const generateSlug = (title: string) => {
@@ -112,18 +136,19 @@ export default function NeighborhoodEditPage() {
       .toLowerCase()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "_")
-      .replace(/-+/g, "_");
+      .replace(/-+/g, "_")
+      .trim();
   };
 
   // Update URL slug when title changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
-      if (name === 'title' && value.title && isNewNeighborhood) {
+      if (name === "title" && value.title && isNewNeighborhood) {
         const slug = generateSlug(value.title as string);
-        form.setValue('urlSlug', slug);
+        form.setValue("urlSlug", slug);
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form, isNewNeighborhood]);
 
@@ -139,11 +164,11 @@ export default function NeighborhoodEditPage() {
     onSuccess: () => {
       toast({
         title: isNewNeighborhood ? "Neighborhood created" : "Neighborhood updated",
-        description: isNewNeighborhood 
-          ? "The neighborhood has been successfully created." 
+        description: isNewNeighborhood
+          ? "The neighborhood has been successfully created."
           : "The neighborhood has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/neighborhoods'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/neighborhoods"] });
       navigate("/neighborhoods");
     },
     onError: (error) => {
@@ -153,7 +178,7 @@ export default function NeighborhoodEditPage() {
         description: `Failed to ${isNewNeighborhood ? "create" : "update"} neighborhood. Please try again.`,
         variant: "destructive",
       });
-    }
+    },
   });
 
   const onSubmit = (data: z.infer<typeof neighborhoodFormSchema>) => {
@@ -163,9 +188,11 @@ export default function NeighborhoodEditPage() {
   return (
     <DashLayout
       title={isNewNeighborhood ? "Add New Neighborhood" : "Edit Neighborhood"}
-      description={isNewNeighborhood 
-        ? "Create a new neighborhood location" 
-        : `Editing neighborhood: ${form.watch('title')}`}
+      description={
+        isNewNeighborhood
+          ? "Create a new neighborhood location"
+          : `Editing neighborhood: ${form.watch("title") || "Loading..."}`
+      }
     >
       <Button
         variant="outline"
@@ -176,9 +203,10 @@ export default function NeighborhoodEditPage() {
         Back to Neighborhoods
       </Button>
 
-      {isLoadingNeighborhood ? (
+      {isLoadingNeighborhood && !isNewNeighborhood ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading neighborhood data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -186,9 +214,7 @@ export default function NeighborhoodEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Basic Information</CardTitle>
-                <CardDescription>
-                  Enter the basic details for this neighborhood
-                </CardDescription>
+                <CardDescription>Enter the basic details for this neighborhood</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -204,7 +230,7 @@ export default function NeighborhoodEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="subtitle"
@@ -212,16 +238,18 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Subtitle</FormLabel>
                       <FormControl>
-                        <Input placeholder="A Majestic Man-Made Island in the Arabian Gulf" {...field} value={field.value || ""} />
+                        <Input
+                          placeholder="A Majestic Man-Made Island in the Arabian Gulf"
+                          {...field}
+                          value={field.value || ""}
+                        />
                       </FormControl>
-                      <FormDescription>
-                        A brief tagline or subtitle for the neighborhood
-                      </FormDescription>
+                      <FormDescription>A brief tagline or subtitle for the neighborhood</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -232,14 +260,12 @@ export default function NeighborhoodEditPage() {
                         <FormControl>
                           <Input placeholder="palm_jumeirah" {...field} />
                         </FormControl>
-                        <FormDescription>
-                          Used for the website URL (automatically generated)
-                        </FormDescription>
+                        <FormDescription>Used for the website URL (automatically generated)</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="region"
@@ -254,7 +280,7 @@ export default function NeighborhoodEditPage() {
                     )}
                   />
                 </div>
-                
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -262,8 +288,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter neighborhood description..." 
+                        <Textarea
+                          placeholder="Enter neighborhood description..."
                           rows={6}
                           {...field}
                           value={field.value || ""}
@@ -281,8 +307,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Subtitle Blurb</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Short description to appear under the subtitle..." 
+                        <Textarea
+                          placeholder="Short description to appear under the subtitle..."
                           rows={3}
                           {...field}
                           value={field.value || ""}
@@ -298,9 +324,7 @@ export default function NeighborhoodEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Location Details</CardTitle>
-                <CardDescription>
-                  Enter detailed information about this neighborhood location
-                </CardDescription>
+                <CardDescription>Enter detailed information about this neighborhood location</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -316,7 +340,7 @@ export default function NeighborhoodEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="locationAttributes"
@@ -324,21 +348,19 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Location Attributes</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Schools, Beaches, Shopping Centers, etc." 
+                        <Textarea
+                          placeholder="Schools, Beaches, Shopping Centers, etc."
                           rows={3}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Key amenities and attractions in this neighborhood
-                      </FormDescription>
+                      <FormDescription>Key amenities and attractions in this neighborhood</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="availableProperties"
@@ -346,17 +368,15 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Available Properties</FormLabel>
                       <FormControl>
-                        <Input 
-                          type="number" 
-                          placeholder="100" 
+                        <Input
+                          type="number"
+                          placeholder="100"
                           {...field}
                           onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Number of properties available in this neighborhood
-                      </FormDescription>
+                      <FormDescription>Number of properties available in this neighborhood</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -367,9 +387,7 @@ export default function NeighborhoodEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Neighborhood Details</CardTitle>
-                <CardDescription>
-                  Additional information about this neighborhood
-                </CardDescription>
+                <CardDescription>Additional information about this neighborhood</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -379,8 +397,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Neighborhood Details</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Detailed information about the neighborhood..." 
+                        <Textarea
+                          placeholder="Detailed information about the neighborhood..."
                           rows={6}
                           {...field}
                           value={field.value || ""}
@@ -390,7 +408,7 @@ export default function NeighborhoodEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="neighbourhoodExpectation"
@@ -398,8 +416,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Neighborhood Expectations</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="What residents can expect living here..." 
+                        <Textarea
+                          placeholder="What residents can expect living here..."
                           rows={4}
                           {...field}
                           value={field.value || ""}
@@ -409,7 +427,7 @@ export default function NeighborhoodEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="neighboursText"
@@ -417,8 +435,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Neighbors Text</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Information about neighboring areas..." 
+                        <Textarea
+                          placeholder="Information about neighboring areas..."
                           rows={4}
                           {...field}
                           value={field.value || ""}
@@ -428,7 +446,7 @@ export default function NeighborhoodEditPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="propertyOffers"
@@ -436,8 +454,8 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Property Offers</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Special property offers in this neighborhood..." 
+                        <Textarea
+                          placeholder="Special property offers in this neighborhood..."
                           rows={4}
                           {...field}
                           value={field.value || ""}
@@ -453,9 +471,7 @@ export default function NeighborhoodEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Media</CardTitle>
-                <CardDescription>
-                  Upload images and documents for this neighborhood
-                </CardDescription>
+                <CardDescription>Upload images and documents for this neighborhood</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -465,16 +481,19 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Banner Image</FormLabel>
                       <FormControl>
-                        <Input placeholder="Image URL..." {...field} value={field.value || ""} />
+                        <FileInput
+                          label="Upload Banner Image"
+                          value={field.value}
+                          onChange={field.onChange}
+                          accept="image/*"
+                        />
                       </FormControl>
-                      <FormDescription>
-                        URL for the main banner image
-                      </FormDescription>
+                      <FormDescription>Image for the main banner</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="images"
@@ -491,14 +510,12 @@ export default function NeighborhoodEditPage() {
                           maxFiles={10}
                         />
                       </FormControl>
-                      <FormDescription>
-                        Upload up to 10 images of the neighborhood
-                      </FormDescription>
+                      <FormDescription>Upload up to 10 images of the neighborhood</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="neighbourImage"
@@ -506,16 +523,19 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Neighbor Image</FormLabel>
                       <FormControl>
-                        <Input placeholder="Image URL..." {...field} value={field.value || ""} />
+                        <FileInput
+                          label="Upload Neighbor Image"
+                          value={field.value}
+                          onChange={field.onChange}
+                          accept="image/*"
+                        />
                       </FormControl>
-                      <FormDescription>
-                        URL for the neighboring areas image
-                      </FormDescription>
+                      <FormDescription>Image for the neighboring areas</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                
+
                 <FormField
                   control={form.control}
                   name="brochure"
@@ -523,11 +543,14 @@ export default function NeighborhoodEditPage() {
                     <FormItem>
                       <FormLabel>Brochure</FormLabel>
                       <FormControl>
-                        <Input placeholder="Brochure URL..." {...field} value={field.value || ""} />
+                        <FileInput
+                          label="Upload Brochure"
+                          value={field.value}
+                          onChange={field.onChange}
+                          accept="application/pdf"
+                        />
                       </FormControl>
-                      <FormDescription>
-                        URL to a PDF brochure for this neighborhood
-                      </FormDescription>
+                      <FormDescription>PDF brochure for this neighborhood</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -538,9 +561,7 @@ export default function NeighborhoodEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Visibility</CardTitle>
-                <CardDescription>
-                  Control the visibility of this neighborhood
-                </CardDescription>
+                <CardDescription>Control the visibility of this neighborhood</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -550,15 +571,10 @@ export default function NeighborhoodEditPage() {
                     <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
                       <div className="space-y-0.5">
                         <FormLabel className="text-base">Show on Footer</FormLabel>
-                        <FormDescription>
-                          Display this neighborhood in the website footer
-                        </FormDescription>
+                        <FormDescription>Display this neighborhood in the website footer</FormDescription>
                       </div>
                       <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -575,7 +591,7 @@ export default function NeighborhoodEditPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"

@@ -57,7 +57,10 @@ export default function DeveloperEditPage() {
 
   // Fetch developer data if editing
   const { data: developerData, isLoading: isLoadingDeveloper } = useQuery({
-    queryKey: ['/api/developers', developerId],
+    queryKey: ["/api/developers", developerId],
+    queryFn: async () => {
+      return apiRequest("GET", `/api/developers/${developerId}`);
+    },
     enabled: !!developerId,
   });
 
@@ -69,10 +72,19 @@ export default function DeveloperEditPage() {
 
   // Populate form when developer data is loaded
   useEffect(() => {
-    if (developerData) {
-      form.reset(developerData);
+    if (developerData && !isNewDeveloper) {
+      const formData: DeveloperFormValues = {
+        title: developerData.title || "",
+        description: developerData.description || "",
+        urlSlug: developerData.urlSlug || "",
+        country: developerData.country || "United Arab Emirates",
+        establishedSince: developerData.establishedSince || "",
+        logo: developerData.logo || "",
+      };
+
+      form.reset(formData);
     }
-  }, [developerData, form]);
+  }, [developerData, form, isNewDeveloper]);
 
   // Generate URL slug from title
   const generateSlug = (title: string) => {
@@ -80,18 +92,19 @@ export default function DeveloperEditPage() {
       .toLowerCase()
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "_")
-      .replace(/-+/g, "_");
+      .replace(/-+/g, "_")
+      .trim();
   };
 
   // Update URL slug when title changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
-      if (name === 'title' && value.title && isNewDeveloper) {
+      if (name === "title" && value.title && isNewDeveloper) {
         const slug = generateSlug(value.title as string);
-        form.setValue('urlSlug', slug);
+        form.setValue("urlSlug", slug);
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form, isNewDeveloper]);
 
@@ -107,11 +120,11 @@ export default function DeveloperEditPage() {
     onSuccess: () => {
       toast({
         title: isNewDeveloper ? "Developer created" : "Developer updated",
-        description: isNewDeveloper 
-          ? "The developer has been successfully created." 
+        description: isNewDeveloper
+          ? "The developer has been successfully created."
           : "The developer has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/developers'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/developers"] });
       navigate("/developers");
     },
     onError: (error) => {
@@ -121,7 +134,7 @@ export default function DeveloperEditPage() {
         description: `Failed to ${isNewDeveloper ? "create" : "update"} developer. Please try again.`,
         variant: "destructive",
       });
-    }
+    },
   });
 
   const onSubmit = (data: z.infer<typeof developerFormSchema>) => {
@@ -131,9 +144,11 @@ export default function DeveloperEditPage() {
   return (
     <DashLayout
       title={isNewDeveloper ? "Add New Developer" : "Edit Developer"}
-      description={isNewDeveloper 
-        ? "Create a new real estate developer" 
-        : `Editing developer: ${form.watch('title')}`}
+      description={
+        isNewDeveloper
+          ? "Create a new real estate developer"
+          : `Editing developer: ${form.watch("title") || "Loading..."}`
+      }
     >
       <Button
         variant="outline"
@@ -144,9 +159,10 @@ export default function DeveloperEditPage() {
         Back to Developers
       </Button>
 
-      {isLoadingDeveloper ? (
+      {isLoadingDeveloper && !isNewDeveloper ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading developer data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -154,42 +170,39 @@ export default function DeveloperEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Developer Information</CardTitle>
-                <CardDescription>
-                  Enter the details for this developer
-                </CardDescription>
+                <CardDescription>Enter the details for this developer</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <Avatar className="h-32 w-32">
-                      <AvatarImage src={form.watch('logo')} alt={form.watch('title')} />
+                      <AvatarImage src={form.watch("logo")} alt={form.watch("title")} />
                       <AvatarFallback className="text-2xl">
-                        {form.watch('title')?.charAt(0) || "D"}
+                        {form.watch("title")?.charAt(0) || "D"}
                       </AvatarFallback>
                     </Avatar>
-                    
+
                     <FormField
                       control={form.control}
                       name="logo"
                       render={({ field }) => (
                         <FormItem className="w-full">
-                          <FormLabel>Logo URL</FormLabel>
+                          <FormLabel>Logo</FormLabel>
                           <FormControl>
-                            <Input 
-                              placeholder="https://example.com/logo.png" 
-                              {...field} 
-                              value={field.value || ""}
+                            <FileInput
+                              label="Upload Logo"
+                              value={field.value}
+                              onChange={field.onChange}
+                              accept="image/*"
                             />
                           </FormControl>
-                          <FormDescription>
-                            URL to the developer's logo image
-                          </FormDescription>
+                          <FormDescription>Developer's logo image</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-                  
+
                   <div className="flex-1 space-y-4">
                     <FormField
                       control={form.control}
@@ -204,7 +217,7 @@ export default function DeveloperEditPage() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -213,13 +226,17 @@ export default function DeveloperEditPage() {
                           <FormItem>
                             <FormLabel>Country</FormLabel>
                             <FormControl>
-                              <Input placeholder="United Arab Emirates" {...field} value={field.value || ""} />
+                              <Input
+                                placeholder="United Arab Emirates"
+                                {...field}
+                                value={field.value || ""}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-                      
+
                       <FormField
                         control={form.control}
                         name="establishedSince"
@@ -234,7 +251,7 @@ export default function DeveloperEditPage() {
                         )}
                       />
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="urlSlug"
@@ -244,16 +261,14 @@ export default function DeveloperEditPage() {
                           <FormControl>
                             <Input placeholder="samana_developers" {...field} />
                           </FormControl>
-                          <FormDescription>
-                            Used for the website URL (automatically generated)
-                          </FormDescription>
+                          <FormDescription>Used for the website URL (automatically generated)</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
                 </div>
-                
+
                 <FormField
                   control={form.control}
                   name="description"
@@ -261,8 +276,8 @@ export default function DeveloperEditPage() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="Enter information about the developer..." 
+                        <Textarea
+                          placeholder="Enter information about the developer..."
                           rows={6}
                           {...field}
                           value={field.value || ""}
@@ -284,7 +299,7 @@ export default function DeveloperEditPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"
