@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
-import { useLocation, useRoute} from "wouter";
+import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashLayout } from "@/components/layout/dash-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { FileInput } from "@/components/ui/file-input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
@@ -32,6 +31,27 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
+// Static agent data
+const staticAgentData = {
+  id: 1,
+  jobTitle: "Property Advisor",
+  languages: "English",
+  licenseNumber: "",
+  location: "Head Office",
+  name: "Asad",
+  headShot:
+    "data:image/webp;base64,UklGRvppAQBXRUJQVlA4WAoAAAAwAAAAaQIAPAMASUNDUMgBAAAAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAAB",
+  photo: "",
+  email: "asadaliabbasi787@gmail.com",
+  phone: "03705764856",
+  introduction: "",
+  linkedin: "https://www.linkedin.com/asad1234",
+  experience: 0,
+  updatedAt: "2025-07-15T10:17:12.795Z",
+  createdAt: "2025-07-15T10:17:12.795Z",
+};
+
+// Zod schema for form validation
 const agentFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
@@ -71,7 +91,13 @@ export default function AgentEditPage() {
 
   // Fetch agent data if editing
   const { data: agentData, isLoading: isLoadingAgent } = useQuery({
-    queryKey: ['/api/agents', agentId],
+    queryKey: ["/api/agents", agentId],
+    queryFn: async () => {
+      if (agentId === 1) {
+        return staticAgentData; // Use static data for id: 1
+      }
+      return apiRequest("GET", `/api/agents/${agentId}`);
+    },
     enabled: !!agentId,
   });
 
@@ -83,17 +109,28 @@ export default function AgentEditPage() {
 
   // Populate form when agent data is loaded
   useEffect(() => {
-    if (agentData) {
-      const formData = { ...agentData };
-      
-      // Convert string experience to number if needed
-      if (typeof formData.experience === 'string') {
-        formData.experience = parseInt(formData.experience) || 0;
-      }
-      
+    if (agentData && !isNewAgent) {
+      const formData: AgentFormValues = {
+        name: agentData.name || "",
+        email: agentData.email || "",
+        phone: agentData.phone || "",
+        jobTitle: agentData.jobTitle || "Property Advisor",
+        licenseNumber: agentData.licenseNumber || "",
+        location: agentData.location || "Head Office",
+        languages: agentData.languages || "English",
+        experience:
+          typeof agentData.experience === "string"
+            ? parseInt(agentData.experience) || 0
+            : agentData.experience || 0,
+        introduction: agentData.introduction || "",
+        linkedin: agentData.linkedin || "",
+        headShot: agentData.headShot || "",
+        photo: agentData.photo || "",
+      };
+
       form.reset(formData);
     }
-  }, [agentData, form]);
+  }, [agentData, form, isNewAgent]);
 
   // Save agent mutation
   const saveMutation = useMutation({
@@ -107,11 +144,11 @@ export default function AgentEditPage() {
     onSuccess: () => {
       toast({
         title: isNewAgent ? "Agent created" : "Agent updated",
-        description: isNewAgent 
-          ? "The agent has been successfully created." 
+        description: isNewAgent
+          ? "The agent has been successfully created."
           : "The agent has been successfully updated.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/agents'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/agents"] });
       navigate("/agents");
     },
     onError: (error) => {
@@ -121,7 +158,7 @@ export default function AgentEditPage() {
         description: `Failed to ${isNewAgent ? "create" : "update"} agent. Please try again.`,
         variant: "destructive",
       });
-    }
+    },
   });
 
   const onSubmit = (data: z.infer<typeof agentFormSchema>) => {
@@ -131,9 +168,9 @@ export default function AgentEditPage() {
   return (
     <DashLayout
       title={isNewAgent ? "Add New Agent" : "Edit Agent"}
-      description={isNewAgent 
-        ? "Create a new agent profile" 
-        : `Editing agent: ${form.watch('name')}`}
+      description={
+        isNewAgent ? "Create a new agent profile" : `Editing agent: ${form.watch("name") || "Loading..."}`
+      }
     >
       <Button
         variant="outline"
@@ -144,9 +181,10 @@ export default function AgentEditPage() {
         Back to Agents
       </Button>
 
-      {isLoadingAgent ? (
+      {isLoadingAgent && !isNewAgent ? (
         <div className="flex justify-center items-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2">Loading agent data...</span>
         </div>
       ) : (
         <Form {...form}>
@@ -154,20 +192,18 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
-                <CardDescription>
-                  Enter the agent's basic information
-                </CardDescription>
+                <CardDescription>Enter the agent's basic information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <Avatar className="h-32 w-32">
-                      <AvatarImage src={form.watch('headShot')} alt={form.watch('name')} />
+                      <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
                       <AvatarFallback className="text-2xl">
-                        {form.watch('name')?.charAt(0) || "A"}
+                        {form.watch("name")?.charAt(0) || "A"}
                       </AvatarFallback>
                     </Avatar>
-                    
+
                     <FormField
                       control={form.control}
                       name="headShot"
@@ -187,7 +223,7 @@ export default function AgentEditPage() {
                       )}
                     />
                   </div>
-                  
+
                   <div className="flex-1 space-y-4">
                     <FormField
                       control={form.control}
@@ -202,7 +238,7 @@ export default function AgentEditPage() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -217,7 +253,7 @@ export default function AgentEditPage() {
                           </FormItem>
                         )}
                       />
-                      
+
                       <FormField
                         control={form.control}
                         name="phone"
@@ -225,14 +261,18 @@ export default function AgentEditPage() {
                           <FormItem>
                             <FormLabel>Phone Number</FormLabel>
                             <FormControl>
-                              <Input placeholder="+971 50 123 4567" {...field} value={field.value || ""} />
+                              <Input
+                                placeholder="+971 50 123 4567"
+                                {...field}
+                                value={field.value || ""}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="linkedin"
@@ -240,15 +280,13 @@ export default function AgentEditPage() {
                         <FormItem>
                           <FormLabel>LinkedIn Profile</FormLabel>
                           <FormControl>
-                            <Input 
-                              placeholder="https://www.linkedin.com/in/username" 
-                              {...field} 
-                              value={field.value || ""} 
+                            <Input
+                              placeholder="https://www.linkedin.com/in/username"
+                              {...field}
+                              value={field.value || ""}
                             />
                           </FormControl>
-                          <FormDescription>
-                            LinkedIn profile URL of the agent
-                          </FormDescription>
+                          <FormDescription>LinkedIn profile URL of the agent</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -261,9 +299,7 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
-                <CardDescription>
-                  Enter the agent's professional information
-                </CardDescription>
+                <CardDescription>Enter the agent's professional information</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -274,13 +310,17 @@ export default function AgentEditPage() {
                       <FormItem>
                         <FormLabel>Job Title</FormLabel>
                         <FormControl>
-                          <Input placeholder="Property Advisor" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Property Advisor"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="licenseNumber"
@@ -288,7 +328,11 @@ export default function AgentEditPage() {
                       <FormItem>
                         <FormLabel>License Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="License Number" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="License Number"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -304,13 +348,17 @@ export default function AgentEditPage() {
                       <FormItem>
                         <FormLabel>Location</FormLabel>
                         <FormControl>
-                          <Input placeholder="Head Office" {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="Head Office"
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="languages"
@@ -318,13 +366,17 @@ export default function AgentEditPage() {
                       <FormItem>
                         <FormLabel>Languages</FormLabel>
                         <FormControl>
-                          <Input placeholder="English, Arabic, etc." {...field} value={field.value || ""} />
+                          <Input
+                            placeholder="English, Arabic, etc."
+                            {...field}
+                            value={field.value || ""}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                  
+
                   <FormField
                     control={form.control}
                     name="experience"
@@ -332,9 +384,9 @@ export default function AgentEditPage() {
                       <FormItem>
                         <FormLabel>Experience (years)</FormLabel>
                         <FormControl>
-                          <Input 
-                            type="number" 
-                            placeholder="5" 
+                          <Input
+                            type="number"
+                            placeholder="5"
                             {...field}
                             onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
                             value={field.value || ""}
@@ -353,16 +405,14 @@ export default function AgentEditPage() {
                     <FormItem>
                       <FormLabel>Introduction</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder="A brief professional introduction for the agent..." 
+                        <Textarea
+                          placeholder="A brief professional introduction for the agent..."
                           rows={6}
                           {...field}
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>
-                        This text will be displayed on the agent's profile page
-                      </FormDescription>
+                      <FormDescription>This text will be displayed on the agent's profile page</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -373,9 +423,7 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Media</CardTitle>
-                <CardDescription>
-                  Upload additional images and media for the agent
-                </CardDescription>
+                <CardDescription>Upload additional images and media for the agent</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -411,7 +459,7 @@ export default function AgentEditPage() {
               >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 type="submit"
                 disabled={saveMutation.isPending}
                 className="flex items-center gap-2"
