@@ -93,10 +93,7 @@ const COMMERCIAL_AMENITIES_MAP: Record<string, string> = {
   'MZ': 'Mezzanine'
 };
 
-// Cache for existing references to avoid repeated DB calls
-let existingReferencesCache: Set<string> | null = null;
-let cacheTimestamp: number = 0;
-const CACHE_DURATION = 60000; // 1 minute cache
+// Removed default amenities - will use empty string if not provided in XML
 
 /**
  * Safely extract first array element or value
@@ -164,37 +161,41 @@ function fixImageUrl(url: string): string {
 }
 
 /**
- * Map XML property to schema - optimized version
+ * Map XML property to schema
  */
 function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
   const reference = extractValue(xmlProperty.reference_number) || '';
   
   try {
-    // Price extraction - optimized
+    // Price extraction
     let price = 0;
-    const priceData = xmlProperty.price?.[0] || xmlProperty.price;
+    const priceData = Array.isArray(xmlProperty.price) ? xmlProperty.price[0] : xmlProperty.price;
     if (priceData?.yearly) {
-      price = parseInt(extractValue(priceData.yearly).toString().replace(/\D/g, ''), 10) || 0;
+      const rawPrice = extractValue(priceData.yearly).toString().replace(/\s/g, '');
+      price = parseInt(rawPrice, 10) || 0;
     }
 
-    // Image extraction with proper URL fixing - optimized
+    // Image extraction with proper URL fixing
     let images: string[] = [];
-    const photoData = xmlProperty.photo?.[0] || xmlProperty.photo;
+    const photoData = Array.isArray(xmlProperty.photo) 
+      ? (xmlProperty.photo.length > 0 ? xmlProperty.photo[0] : null)
+      : xmlProperty.photo;
+    
     if (photoData?.url) {
       const rawUrls = Array.isArray(photoData.url) ? photoData.url : [photoData.url];
       images = rawUrls
-        .filter(Boolean)
+        .filter((url: string) => url && typeof url === 'string')
         .map((url: string) => fixImageUrl(url))
         .filter((url: string) => url.length > 0);
     }
 
-    // Agent extraction - optimized
+    // Agent extraction
     let agent = null;
-    const agentData = xmlProperty.agent?.[0] || xmlProperty.agent;
-    if (agentData) {
+    if (xmlProperty.agent) {
+      const agentData = Array.isArray(xmlProperty.agent) ? xmlProperty.agent[0] : xmlProperty.agent;
       agent = [{
-        id: extractValue(agentData.id),
-        name: extractValue(agentData.name)
+        id: extractValue(agentData?.id),
+        name: extractValue(agentData?.name)
       }];
     }
 
@@ -202,14 +203,16 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
     const propertyTypeCode = extractValue(xmlProperty.property_type) || 'AP';
     const isCommercial = COMMERCIAL_TYPES.has(propertyTypeCode);
 
-    // Amenities processing - optimized
+    // Amenities processing - only use what's provided in XML
     let amenities = '';
     const rawAmenities = extractValue(xmlProperty.private_amenities) || extractValue(xmlProperty.commercial_amenities);
+    
     if (rawAmenities) {
       amenities = parseAmenities(rawAmenities, isCommercial);
     }
+    // If no amenities in XML, leave empty string
 
-    // Furnished status - optimized
+    // Furnished status
     const furnishedValue = extractValue(xmlProperty.furnished)?.toLowerCase() || '';
     const isFurnished = furnishedValue === 'yes' || furnishedValue === 'partly';
     const isFitted = furnishedValue.includes('partly');
@@ -251,81 +254,14 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
   }
 }
 
-/**
- * Get existing references with caching
- */
-async function getExistingReferences(): Promise<Set<string>> {
-  const now = Date.now();
-  
-  // Return cached data if valid
-  if (existingReferencesCache && (now - cacheTimestamp) < CACHE_DURATION) {
-    return existingReferencesCache;
-  }
-  
-  // Fetch fresh data
-  const references = await storage.getAllPropertyReferences();
-  existingReferencesCache = new Set(references.map(ref => ref.reference));
-  cacheTimestamp = now;
-  
-  return existingReferencesCache;
-}
-
-/**
- * Batch process properties for better performance
- */
-async function batchProcessProperties(xmlProperties: any[], batchSize: number = 50): Promise<{
-  propertiesToInsert: InsertProperty[];
-  processedReferences: string[];
-  errors: Array<{ reference: string; error: string }>;
-}> {
-  const propertiesToInsert: InsertProperty[] = [];
-  const processedReferences: string[] = [];
-  const errors: Array<{ reference: string; error: string }> = [];
-  
-  // Get existing references once
-  const existingReferences = await getExistingReferences();
-  
-  // Process in batches to avoid memory issues
-  for (let i = 0; i < xmlProperties.length; i += batchSize) {
-    const batch = xmlProperties.slice(i, i + batchSize);
-    
-    for (const xmlProperty of batch) {
-      try {
-        const reference = extractValue(xmlProperty.reference_number);
-        if (!reference) {
-          errors.push({ reference: 'unknown', error: 'Missing reference number' });
-          continue;
-        }
-        
-        // Skip existing references - this is the key fix
-        if (existingReferences.has(reference)) {
-          continue;
-        }
-
-        const propertyData = mapXmlToPropertySchema(xmlProperty);
-        propertiesToInsert.push(propertyData);
-        processedReferences.push(reference);
-        
-        // Add to cache to prevent duplicates within this batch
-        existingReferences.add(reference);
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : 'Unknown mapping error';
-        errors.push({ reference: extractValue(xmlProperty.reference_number) || 'unknown', error: errorMsg });
-      }
-    }
-  }
-  
-  return { propertiesToInsert, processedReferences, errors };
-}
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
   
-  // Enable CORS with optimized headers
+  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-cache'); // Disable caching for import endpoint
+  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -341,7 +277,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ message: 'Storage service unavailable' });
     }
 
-    // Get XML data with timeout optimization
+    // Get XML data
     let xmlData: string;
     if (req.method === 'POST' && req.body && typeof req.body === 'string' && req.body.includes('<list')) {
       xmlData = req.body;
@@ -350,13 +286,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       try {
         const response = await axios.get(xmlUrl, {
-          timeout: 10000, // Increased timeout
+          timeout: 5000,
           headers: {
             'Accept': 'application/xml, text/xml',
-            'User-Agent': 'PropertyImporter/1.0',
-            'Accept-Encoding': 'gzip' // Enable compression
-          },
-          maxRedirects: 5
+            'User-Agent': 'PropertyImporter/1.0'
+          }
         });
         xmlData = response.data;
       } catch (error) {
@@ -370,7 +304,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
     
-    // Parse XML with error handling
+    // Parse XML
     let result;
     try {
       result = await XML_PARSER.parseStringPromise(xmlData);
@@ -398,13 +332,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         processingTimeMs: Date.now() - startTime
       });
     }
+    
+    // Fetch existing references
+    let existingReferences: Set<string>;
+    try {
+      const references = await storage.getAllPropertyReferences();
+      existingReferences = new Set(references.map(ref => ref.reference));
+    } catch (dbError) {
+      console.error('Error fetching references:', dbError);
+      return res.status(500).json({
+        error: 'Database error',
+        message: 'Failed to fetch existing property references',
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
+      });
+    }
 
-    // Process properties in batches for better performance
-    const { propertiesToInsert, processedReferences, errors } = await batchProcessProperties(xmlProperties, 100);
+    // Process properties
+    const propertiesToInsert: InsertProperty[] = [];
+    const processedReferences: string[] = [];
+    const errors: Array<{ reference: string; error: string }> = [];
+    
+    for (const xmlProperty of xmlProperties) {
+      try {
+        const reference = extractValue(xmlProperty.reference_number);
+        if (!reference) {
+          errors.push({ reference: 'unknown', error: 'Missing reference number' });
+          continue;
+        }
+        
+        // Skip existing references
+        if (existingReferences.has(reference)) {
+          continue;
+        }
+
+        const propertyData = mapXmlToPropertySchema(xmlProperty);
+        propertiesToInsert.push(propertyData);
+        processedReferences.push(reference);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown mapping error';
+        errors.push({ reference: extractValue(xmlProperty.reference_number) || 'unknown', error: errorMsg });
+        console.error('Property mapping error:', errorMsg);
+      }
+    }
 
     if (propertiesToInsert.length === 0) {
       return res.status(200).json({
-        message: 'No new properties to insert (all properties already exist)',
+        message: 'No new properties to insert',
         total: xmlProperties.length,
         processed: 0,
         errors: errors.length,
@@ -415,17 +389,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Insert new properties with optimized batch size
+    // Insert new properties
     try {
-      const { success, errors: insertErrors } = await storage.bulkInsertProperties(propertiesToInsert, 200);
+      const { success, errors: insertErrors } = await storage.bulkInsertProperties(propertiesToInsert, 100);
       errors.push(...insertErrors);
-      
-      // Update cache with new references
-      if (existingReferencesCache) {
-        processedReferences.slice(0, success).forEach(ref => {
-          existingReferencesCache!.add(ref);
-        });
-      }
       
       const processingTime = Date.now() - startTime;
       return res.status(200).json({
@@ -436,12 +403,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         results: processedReferences.slice(0, success).map(ref => ({ reference: ref, action: 'created' })),
         errorDetails: errors,
         timestamp: new Date().toISOString(),
-        processingTimeMs: processingTime,
-        performanceStats: {
-          xmlParseTime: `${processingTime}ms`,
-          avgProcessingTimePerProperty: `${(processingTime / xmlProperties.length).toFixed(2)}ms`,
-          duplicatesSkipped: xmlProperties.length - propertiesToInsert.length - errors.length
-        }
+        processingTimeMs: processingTime
       });
     } catch (dbError) {
       console.error('Database operation failed:', dbError);
