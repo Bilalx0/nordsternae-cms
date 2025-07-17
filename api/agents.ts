@@ -44,55 +44,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  // Extract id from URL
-  // This logic is for path-based IDs (e.g., /api/agents/123)
-  // Query parameters are handled separately via req.query
-  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'agents');
-  const id = urlParts[0]; // This 'id' is from the path, not query params
-  const hasIdInPath = !!id && typeof id === 'string';
-  const agentIdFromPath = hasIdInPath ? parseInt(id) : null;
+  // Extract id from URL path. This should only happen for paths like /api/agents/123
+  // It should NOT try to parse query parameters as part of the path.
+  const pathParts = req.url.split('?')[0].split('/').filter(part => part); // Get path before query, then split
+  let agentIdFromPath: number | null = null;
+  let hasIdInPath = false;
 
-  if (hasIdInPath && agentIdFromPath !== null && isNaN(agentIdFromPath)) {
-    console.log('Invalid ID in path: not a number after parsing:', id);
-    return res.status(400).json({ message: 'Invalid ID in path' });
+  // Find the segment immediately after 'agents' that looks like an ID
+  const agentsIndex = pathParts.indexOf('agents');
+  if (agentsIndex !== -1 && agentsIndex + 1 < pathParts.length) {
+    const potentialId = pathParts[agentsIndex + 1];
+    const parsedId = parseInt(potentialId);
+    if (!isNaN(parsedId)) {
+      agentIdFromPath = parsedId;
+      hasIdInPath = true;
+    } else {
+      // If there's a segment after 'agents' but it's not a valid number, it's an invalid path.
+      console.log('Invalid ID in path: not a number:', potentialId);
+      return res.status(400).json({ message: 'Invalid ID in path' });
+    }
   }
 
   console.log('Parsed agentId from path:', agentIdFromPath);
+  console.log('Has ID in path:', hasIdInPath);
 
   try {
     // Base route: /api/agents (handles GET all and GET with query parameters, POST)
     if (!hasIdInPath) {
       if (req.method === 'GET') {
         console.log('Fetching agents with query filters (if any):', req.query);
-        // Get all agents first
         let agents = await storage.getAgents();
 
-        // Apply filters based on query parameters
-        // req.query contains all query parameters as key-value pairs
-        // Example: /api/agents?name=John%20Doe&licenseNumber=ALN123
         for (const key in req.query) {
           const queryValue = req.query[key];
 
-          // Ensure the queryValue is a string for filtering, or handle arrays if applicable
           if (typeof queryValue === 'string') {
             const lowerCaseQueryValue = queryValue.toLowerCase();
 
             agents = agents.filter((agent: any) => {
-              const agentValue = agent[key]; // Access the agent's field value
+              const agentValue = agent[key];
 
-              // Basic case-insensitive string matching
               if (typeof agentValue === 'string') {
                 return agentValue.toLowerCase().includes(lowerCaseQueryValue);
               }
-              // If it's a number, convert query to number for comparison (e.g., for numerical IDs if applicable)
               if (typeof agentValue === 'number' && !isNaN(parseFloat(queryValue))) {
                 return agentValue === parseFloat(queryValue);
               }
-              // You might need more specific logic for nested objects or complex types
-              return false; // Exclude if type not handled or no match
+              return false;
             });
           }
-          // Add more complex filtering logic here if needed (e.g., for specific date ranges, etc.)
         }
 
         console.log('Retrieved agents count after filtering:', agents.length);
@@ -112,6 +112,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     // Dynamic route: /api/agents/:id (GET single by ID, PUT, DELETE)
     else {
+      // Ensure agentIdFromPath is not null for these operations
+      if (agentIdFromPath === null) {
+        return res.status(400).json({ message: 'Agent ID is required for this operation' });
+      }
+
       if (req.method === 'GET') {
         console.log('Querying agent with ID from path:', agentIdFromPath);
         const agent = await storage.getAgent(agentIdFromPath);
