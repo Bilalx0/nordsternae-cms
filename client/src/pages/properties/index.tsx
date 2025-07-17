@@ -668,7 +668,7 @@ export default function PropertiesPage() {
             <Trash2 className="h-4 w-4" />
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
           </Button>
-          {/* <Button
+          <Button
             variant="destructive"
             onClick={handleDeduplicate}
             className="flex items-center gap-2"
@@ -676,7 +676,7 @@ export default function PropertiesPage() {
           >
             <Trash2 className="h-4 w-4" />
             {isDeduplicating ? "Deduplicating..." : "Remove Duplicates"}
-          </Button> */}
+          </Button>
           <Button
             variant={isSelectionMode ? "default" : "outline"}
             onClick={toggleSelectionMode}
