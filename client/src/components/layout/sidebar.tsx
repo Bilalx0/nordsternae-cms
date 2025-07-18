@@ -150,10 +150,10 @@ function SidebarContent({ routes }) {
 
   return (
     <div className="flex h-full flex-col bg-white border-r border-neutral-200">
-      <div className="flex items-center justify-center h-16 bg-primary">
+      <div className="flex items-center justify-center h-16 bg-slate-300">
         <Link href="/">
           <span className="text-white text-xl font-semibold cursor-pointer">
-            NORDSTERN
+            <img src="https://nordstern.ae/logo_nordstern.svg" alt="" />
           </span>
         </Link>
       </div>
