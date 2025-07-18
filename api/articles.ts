@@ -2,7 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { insertArticleSchema } from '../shared/schema.js';
 import { validateBody } from '../server/utils.js';
 
-// Initialize storage with error handling
+
 let storage: any = null;
 let storageError: string | null = null;
 
@@ -38,7 +38,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ message: 'Storage service unavailable', error: storageError });
   }
 
-  // Safely handle req.url
   if (!req.url) {
     console.log('Invalid request: URL is undefined');
     return res.status(400).json({ message: 'Invalid request' });
@@ -50,44 +49,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const hasIdInPath = !!id && typeof id === 'string';
   const articleIdFromPath = hasIdInPath ? parseInt(id) : null;
 
-  if (hasIdInPath && articleIdFromPath !== null && isNaN(articleIdFromPath)) {
-    console.log('Invalid ID in path: not a number after parsing:', id);
-    return res.status(400).json({ message: 'Invalid ID in path' });
-  }
-
-  console.log('Parsed articleId from path:', articleIdFromPath);
-
   try {
     // Base route: /api/articles (handles GET all, GET with query parameters including slug, POST)
     if (!hasIdInPath) {
       if (req.method === 'GET') {
         console.log('Fetching articles with query filters:', req.query);
 
-        // Check for slug query parameter
+        // Handle slug query parameter
         const { slug } = req.query;
-        if (slug && typeof slug === 'string') {
+        if (slug && typeof slug === 'string' && slug.trim() !== '') {
           console.log(`Fetching article by slug: ${slug}`);
           const articles = await storage.getArticles();
-          const article = articles.find((a: any) => a.slug === slug) || null;
+          const article = articles.find((a: { slug: string }) => a.slug === slug) || null;
 
           if (!article) {
             console.log(`No article found for slug: ${slug}`);
             return res.status(404).json({ message: `Article not found for slug: ${slug}` });
           }
 
+          // Ensure image fields
+          article.tileImage = article.tileImage || [{ downloadURL: '/fallback-image.jpg' }];
+          article.inlineImages = article.inlineImages || [];
+
           console.log(`Found article for slug: ${slug}`, article);
-          return res.status(200).json(article); // Return single article object
+          return res.status(200).json(article);
         }
 
-        // Handle other query parameters (e.g., category, author)
+        // Handle other query parameters
         let articles = await storage.getArticles();
         for (const key in req.query) {
-          if (key === 'slug') continue; // Skip slug as it's handled above
+          if (key === 'slug') continue;
           const queryValue = req.query[key];
 
           if (typeof queryValue === 'string') {
             const lowerCaseQueryValue = queryValue.toLowerCase();
-            articles = articles.filter((article: any) => {
+            articles = articles.filter((article: Record<string, unknown>) => {
               const articleValue = article[key];
               if (typeof articleValue === 'string') {
                 return articleValue.toLowerCase().includes(lowerCaseQueryValue);
@@ -102,6 +98,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           }
         }
+
+        // Ensure image fields for all articles
+        articles.forEach((article: { tileImage: any; inlineImages: any[] }) => {
+          article.tileImage = article.tileImage || [{ downloadURL: '/fallback-image.jpg' }];
+          article.inlineImages = article.inlineImages || [];
+        });
 
         console.log('Retrieved articles count after filtering:', articles.length);
         res.status(200).json(articles);
@@ -120,13 +122,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     // Dynamic route: /api/articles/:id (GET single by ID, PUT, DELETE)
     else {
+      if (articleIdFromPath === null || isNaN(articleIdFromPath)) {
+        console.log('Invalid ID in path:', id);
+        return res.status(400).json({ message: 'Invalid ID in path' });
+      }
+
       if (req.method === 'GET') {
         console.log('Querying article with ID from path:', articleIdFromPath);
         const article = await storage.getArticle(articleIdFromPath);
-        console.log('Retrieved article:', article);
         if (!article) {
           return res.status(404).json({ message: 'Article not found' });
         }
+        article.tileImage = article.tileImage || [{ downloadURL: '/fallback-image.jpg' }];
+        article.inlineImages = article.inlineImages || [];
+        console.log('Retrieved article:', article);
         res.status(200).json(article);
       } else if (req.method === 'PUT') {
         const data = validateBody(insertArticleSchema.partial(), req, res);
@@ -136,6 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!article) {
           return res.status(404).json({ message: 'Article not found' });
         }
+        article.tileImage = article.tileImage || [{ downloadURL: '/fallback-image.jpg' }];
+        article.inlineImages = article.inlineImages || [];
         res.status(200).json(article);
       } else if (req.method === 'DELETE') {
         console.log('Attempting to delete article with ID from path:', articleIdFromPath);
@@ -154,9 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       error: 'Internal Server Error',
       message: error instanceof Error ? error.message : 'Unknown error',
-      storageError,
       timestamp: new Date().toISOString(),
-      articleId: articleIdFromPath,
+      articleId: articleIdFromPath
     });
   }
   console.log('=== ARTICLES API HANDLER END ===');
