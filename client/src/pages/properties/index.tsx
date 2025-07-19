@@ -31,7 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 
 // Define types for better TypeScript support
 interface Property {
-  id: number;
+  id: string; // Changed to string to match JSON
   reference: string;
   title: string;
   propertyType: string;
@@ -40,8 +40,24 @@ interface Property {
   price: number;
   currency: string;
   propertyStatus: string;
-  isDisabled: boolean; // Updated to use isDisabled for visibility
-  isFeatured: boolean; // Added isFeatured
+  isDisabled: boolean;
+  isFeatured: boolean;
+  listingType?: string;
+  address?: string;
+  country?: string;
+  bedrooms?: number;
+  bathrooms?: number;
+  description?: string;
+  sqfeetArea?: number;
+  amenities?: string[];
+  isFurnished?: boolean;
+  lifestyle?: string;
+  permit?: number;
+  brochure?: string;
+  images?: string;
+  development?: { id: string; name: string }[];
+  neighbourhood?: { id: string; name: string }[];
+  sold?: boolean;
   agent?: {
     id: string;
     name: string;
@@ -54,7 +70,7 @@ interface Property {
 interface ImportResult {
   reference: string;
   action: 'created' | 'updated';
-  id: number;
+  id: string; // Changed to string
 }
 
 interface ImportResponse {
@@ -69,13 +85,13 @@ interface ImportResponse {
 export default function PropertiesPage() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isImportCsvDialogOpen, setIsImportCsvDialogOpen] = useState<boolean>(false);
-  const [isImportJsonDialogOpen, setIsImportJsonDialogOpen] = useState<boolean>(false); // New state for JSON dialog
-  const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState<boolean>(false);
+  const [isJsonImportDialogOpen, setIsJsonImportDialogOpen] = useState<boolean>(false);
+  const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null); // Changed to string
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
   const [showDeduplicateDialog, setShowDeduplicateDialog] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isAutoImporting, setIsAutoImporting] = useState<boolean>(false); // Renamed for clarity
+  const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isDeduplicating, setIsDeduplicating] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
@@ -83,28 +99,21 @@ export default function PropertiesPage() {
 
   const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60);
 
-  // State for JSON import specific UI
-  const [jsonFile, setJsonFile] = useState<File | null>(null);
-  const [jsonImportMessage, setJsonImportMessage] = useState<{ text: string, type: 'info' | 'success' | 'error' } | null>(null);
-  const [isJsonProcessing, setIsJsonProcessing] = useState<boolean>(false);
-  const [jsonPreviewContent, setJsonPreviewContent] = useState<string>('');
-
-
   // Fetch properties
   const { data: rawProperties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
 
-  // Delete property mutation with enhanced feedback
-  const deletePropertyMutation = useMutation<any, Error, number>({
-    mutationFn: async (id: number) => {
+  // Delete property mutation
+  const deletePropertyMutation = useMutation<any, Error, string>({
+    mutationFn: async (id: string) => {
       const result = await apiRequest("DELETE", `/api/properties/${id}`);
       return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
     },
-    onError: (error: Error, id: number) => {
+    onError: (error: Error, id: string) => {
       toast({
         title: "Deletion Failed",
         description: `Failed to delete property with ID ${id}: ${error.message || 'Please try again.'}`,
@@ -114,10 +123,10 @@ export default function PropertiesPage() {
     },
   });
 
-  // Auto-import mutation with enhanced error handling
+  // Auto-import mutation
   const autoImportMutation = useMutation<ImportResponse, Error>({
     mutationFn: async (): Promise<ImportResponse> => {
-      setIsAutoImporting(true);
+      setIsImporting(true);
       const result = await apiRequest("GET", "/api/import-properties");
       return result as ImportResponse;
     },
@@ -159,22 +168,91 @@ export default function PropertiesPage() {
       setTimeRemaining(15 * 60);
     },
     onSettled: () => {
-      setIsAutoImporting(false);
+      setIsImporting(false);
     },
   });
 
-  // Manual auto-import function (from XML feed)
+  // Manual import function
   const handleManualImport = async (): Promise<void> => {
-    if (!isAutoImporting) {
+    if (!isImporting) {
       autoImportMutation.mutate();
     }
   };
 
-  // Simple countdown timer effect for auto-import
+  // JSON import mutation
+  const jsonImportMutation = useMutation<ImportResponse, Error, any[]>({
+    mutationFn: async (data: any[]): Promise<ImportResponse> => {
+      const result = await apiRequest("POST", "/api/properties", data);
+      return result as ImportResponse;
+    },
+    onSuccess: (result: ImportResponse) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
+      const { processed = 0, errors = 0, results = [] } = result;
+      const created = results.filter((r: ImportResult) => r.action === 'created').length;
+      const updated = results.filter((r: ImportResult) => r.action === 'updated').length;
+
+      toast({
+        title: "JSON Import Successful",
+        description: `${created} new properties created, ${updated} updated. ${errors > 0 ? `${errors} errors occurred.` : ''}`,
+      });
+      setIsJsonImportDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "JSON Import Failed",
+        description: `Failed to import JSON data: ${error.message || 'Please check the file format and try again.'}`,
+        variant: "destructive",
+      });
+      console.error("JSON import failed:", error);
+    },
+  });
+
+  // Handle JSON file upload
+  const handleJsonImport = async (file: File): Promise<void> => {
+    try {
+      const text = await file.text();
+      let jsonData: any[];
+
+      try {
+        jsonData = JSON.parse(text);
+        if (!Array.isArray(jsonData)) {
+          throw new Error("JSON data must be an array of property objects");
+        }
+      } catch (parseError) {
+        throw new Error("Invalid JSON format");
+      }
+
+      // Validate required fields
+      const requiredFields = ['reference', 'title', 'propertyType', 'community', 'region', 'price', 'currency', 'propertyStatus'];
+      const invalidEntries = jsonData.filter(item => 
+        !requiredFields.every(field => item[field] !== undefined && item[field] !== null)
+      );
+
+      if (invalidEntries.length > 0) {
+        throw new Error(`Invalid data: ${invalidEntries.length} entries are missing required fields`);
+      }
+
+      // Clean up data (optional: remove _createdBy and _updatedBy if not needed)
+      const cleanedData = jsonData.map(item => {
+        const { _createdBy, _updatedBy, ...rest } = item;
+        return rest;
+      });
+
+      jsonImportMutation.mutate(cleanedData);
+    } catch (error) {
+      toast({
+        title: "JSON Import Error",
+        description: (error as Error).message || " Failed to process JSON file",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Countdown timer effect
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (!isAutoImporting && timeRemaining > 0) {
+    if (!isImporting && timeRemaining > 0) {
       interval = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
@@ -189,7 +267,7 @@ export default function PropertiesPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isAutoImporting, timeRemaining, autoImportMutation]);
+  }, [isImporting, timeRemaining, autoImportMutation]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number): string => {
@@ -209,7 +287,7 @@ export default function PropertiesPage() {
     });
   };
 
-  // Delete all properties mutation with enhanced feedback
+  // Delete all properties mutation
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
       const propertyIds = rawProperties.map(property => property.id);
@@ -250,7 +328,6 @@ export default function PropertiesPage() {
   const confirmDeduplicate = async (): Promise<void> => {
     setIsDeduplicating(true);
     try {
-      // Group properties by reference
       const groupedByReference = rawProperties.reduce((acc, property) => {
         if (!acc[property.reference]) {
           acc[property.reference] = [];
@@ -259,19 +336,15 @@ export default function PropertiesPage() {
         return acc;
       }, {} as Record<string, Property[]>);
 
-      // Identify duplicates to delete (keep the one with highest ID)
-      const propertiesToDelete: number[] = [];
+      const propertiesToDelete: string[] = [];
       Object.values(groupedByReference).forEach(group => {
         if (group.length > 1) {
-          // Sort by ID descending to keep the highest ID
-          const sortedGroup = group.sort((a, b) => b.id - a.id);
-          // Add all but the first (highest ID) to delete list
+          const sortedGroup = group.sort((a, b) => b.id.localeCompare(a.id));
           propertiesToDelete.push(...sortedGroup.slice(1).map(p => p.id));
         }
       });
 
-      // Delete duplicates
-      const deletePromises = propertiesToDelete.map(id =>
+      const deletePromises = propertiesToDelete.map(id => 
         deletePropertyMutation.mutateAsync(id)
       );
       const results = await Promise.allSettled(deletePromises);
@@ -304,7 +377,7 @@ export default function PropertiesPage() {
     }
   };
 
-  const handleDelete = (id: number): void => {
+  const handleDelete = (id: string): void => {
     setDeletePropertyId(id);
   };
 
@@ -338,11 +411,10 @@ export default function PropertiesPage() {
 
   // Handle export CSV
   const handleExportCSV = (): void => {
-    // Deduplicate properties for export
     const deduplicatedProperties = Array.isArray(rawProperties)
       ? [...rawProperties]
-          .sort((a, b) => b.id - a.id)
-          .filter((property, index, self) =>
+          .sort((a, b) => b.id.localeCompare(a.id))
+          .filter((property, index, self) => 
             index === self.findIndex(p => p.reference === property.reference)
           )
       : [];
@@ -379,87 +451,9 @@ export default function PropertiesPage() {
       title: "Import Successful",
       description: `${data.length} properties have been imported.`,
     });
-    setIsImportCsvDialogOpen(false);
+    setIsImportDialogOpen(false);
     queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
   };
-
-  // New JSON Import Logic
-  const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files && event.target.files[0]) {
-      setJsonFile(event.target.files[0]);
-      setJsonImportMessage(null); // Clear previous messages
-      setJsonPreviewContent(''); // Clear previous preview
-    } else {
-      setJsonFile(null);
-    }
-  };
-
-  const handleJsonImport = () => {
-    if (!jsonFile) {
-      setJsonImportMessage({ text: 'Please select a JSON file to import.', type: 'error' });
-      return;
-    }
-
-    if (jsonFile.type !== 'application/json') {
-      setJsonImportMessage({ text: 'Please select a valid JSON file (.json).', type: 'error' });
-      return;
-    }
-
-    setIsJsonProcessing(true);
-    setJsonImportMessage({ text: 'Reading file...', type: 'info' });
-    setJsonPreviewContent('');
-
-    const reader = new FileReader();
-
-    reader.onload = (e) => {
-      try {
-        const fileContent = e.target.result as string;
-        const jsonData = JSON.parse(fileContent);
-
-        setJsonPreviewContent(JSON.stringify(jsonData, null, 2));
-        setJsonImportMessage({ text: 'File parsed successfully. Simulating import...', type: 'info' });
-
-        // --- IMPORTANT SECURITY WARNING ---
-        // Directly connecting to a PostgreSQL database from client-side JavaScript
-        // (like in a browser) is HIGHLY INSECURE. Your database credentials
-        // would be exposed to anyone inspecting your web page.
-        //
-        // For a real-world application, this 'jsonData' should be sent to a
-        // SECURE BACKEND API. The backend would then handle the connection
-        // to your Neon PostgreSQL database using a server-side PostgreSQL client
-        // (e.g., psycopg2 in Python, node-postgres in Node.js) and perform the import.
-        //
-        // The code below SIMULATES a successful import for demonstration purposes
-        // of the frontend UI and JSON parsing. DO NOT use this for production
-        // with actual database credentials.
-        // --- END SECURITY WARNING ---
-
-        setTimeout(() => {
-          setIsJsonProcessing(false);
-          setJsonImportMessage({ text: 'JSON data processed and simulated as imported successfully!', type: 'success' });
-          console.log('Simulated JSON data for import:', jsonData);
-          // In a real scenario, you'd handle the actual database insertion here
-          // after receiving a success response from your secure backend.
-          // For now, we'll just close the dialog after a successful simulation.
-          // setIsImportJsonDialogOpen(false); // Uncomment to auto-close
-          // queryClient.invalidateQueries({ queryKey: ['/api/properties'] }); // Invalidate if actual data was imported
-        }, 2000); // Simulate 2-second network/processing delay
-
-      } catch (error) {
-        setIsJsonProcessing(false);
-        setJsonImportMessage({ text: `Error parsing JSON file: ${(error as Error).message}. Please ensure it's valid JSON.`, type: 'error' });
-        console.error('JSON parsing error:', error);
-      }
-    };
-
-    reader.onerror = () => {
-      setIsJsonProcessing(false);
-      setJsonImportMessage({ text: 'Error reading file. Please try again.', type: 'error' });
-    };
-
-    reader.readAsText(jsonFile);
-  };
-
 
   const propertyColumns: ColumnDef<Property>[] = [
     {
@@ -552,7 +546,7 @@ export default function PropertiesPage() {
       header: "Agent",
       accessorKey: "agent",
       cell: ({ row }) => {
-        const agent = row.original.agent;
+ the agent = row.original.agent;
         if (!agent || (Array.isArray(agent) && agent.length === 0)) {
           return <div className="text-muted-foreground">Unassigned</div>;
         }
@@ -609,11 +603,10 @@ export default function PropertiesPage() {
     },
   ];
 
-  // Deduplicate properties for display
-  const properties = Array.isArray(rawProperties)
+  const deduplicatedProperties = Array.isArray(rawProperties)
     ? [...rawProperties]
-        .sort((a, b) => b.id - a.id)
-        .filter((property, index, self) =>
+        .sort((a, b) => b.id.localeCompare(a.id))
+        .filter((property, index, self) => 
           index === self.findIndex(p => p.reference === property.reference)
         )
     : [];
@@ -634,7 +627,7 @@ export default function PropertiesPage() {
       title: "Status",
       options: [
         { label: "Off Plan", value: "Off Plan" },
-        { label: "Ready", value: " READY" },
+        { label: "Ready", value: "Ready" },
         { label: "Sold", value: "Sold" }
       ]
     },
@@ -674,7 +667,7 @@ export default function PropertiesPage() {
               </span>
             )}
 
-            {isAutoImporting ? (
+            {isImporting ? (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 <span className="text-xs font-medium">Importing...</span>
@@ -715,10 +708,10 @@ export default function PropertiesPage() {
             variant="outline"
             onClick={handleManualImport}
             className="flex items-center gap-2"
-            disabled={isAutoImporting}
+            disabled={isImporting}
           >
-            <Download className={`h-4 w-4 ${isAutoImporting ? 'animate-spin' : ''}`} />
-            {isAutoImporting ? "Importing..." : "Import Now"}
+            <Download className={`h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
+            {isImporting ? "Importing..." : "Import Now"}
           </Button>
           <Button
             variant="outline"
@@ -730,16 +723,15 @@ export default function PropertiesPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setIsImportCsvDialogOpen(true)}
+            onClick={() => setIsImportDialogOpen(true)}
             className="flex items-center gap-2"
           >
             <FileUp className="h-4 w-4" />
             Import CSV
           </Button>
-          {/* New Button for JSON Import */}
           <Button
             variant="outline"
-            onClick={() => setIsImportJsonDialogOpen(true)}
+            onClick={() => setIsJsonImportDialogOpen(true)}
             className="flex items-center gap-2"
           >
             <FileUp className="h-4 w-4" />
@@ -758,7 +750,7 @@ export default function PropertiesPage() {
             variant="destructive"
             onClick={handleDeleteAll}
             className="flex items-center gap-2"
-            disabled={!Array.isArray(properties) || properties.length === 0 || deleteAllPropertiesMutation.isPending}
+            disabled={!Array.isArray(deduplicatedProperties) || deduplicatedProperties.length === 0 || deleteAllPropertiesMutation.isPending}
           >
             <Trash2 className="h-4 w-4" />
             {deleteAllPropertiesMutation.isPending ? "Deleting..." : "Delete All"}
@@ -767,7 +759,7 @@ export default function PropertiesPage() {
             variant="destructive"
             onClick={handleDeduplicate}
             className="flex items-center gap-2"
-            disabled={!Array.isArray(properties) || properties.length === 0 || isDeduplicating}
+            disabled={!Array.isArray(deduplicatedProperties) || deduplicatedProperties.length === 0 || isDeduplicating}
           >
             <Trash2 className="h-4 w-4" />
             {isDeduplicating ? "Deduplicating..." : "Remove Duplicates"}
@@ -784,7 +776,7 @@ export default function PropertiesPage() {
 
       <DataTable
         columns={propertyColumns}
-        data={properties}
+        data={deduplicatedProperties}
         filterableColumns={filterableColumns}
         searchableColumns={[
           {
@@ -802,7 +794,7 @@ export default function PropertiesPage() {
         setRowSelection={setSelectedRowIds}
       />
 
-      <Dialog open={isImportCsvDialogOpen} onOpenChange={setIsImportCsvDialogOpen}>
+      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Import Properties (CSV)</DialogTitle>
@@ -823,69 +815,27 @@ export default function PropertiesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* New Dialog for JSON Import */}
-      <Dialog open={isImportJsonDialogOpen} onOpenChange={setIsImportJsonDialogOpen}>
-        <DialogContent className="max-w-xl">
+      <Dialog open={isJsonImportDialogOpen} onOpenChange={setIsJsonImportDialogOpen}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Import Properties (JSON)</DialogTitle>
             <DialogDescription>
-              Upload a JSON file to import properties.
+              Upload a JSON file containing an array of property objects with required fields: reference, title, propertyType, community, region, price, currency, propertyStatus.
             </DialogDescription>
           </DialogHeader>
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md relative mb-4 text-sm" role="alert">
-            <strong className="font-bold">Security Warning:</strong>
-            <span className="block sm:inline">Direct client-side database interaction is INSECURE.</span>
-            <p className="mt-1">This demonstration **simulates** the import. For a real application, you **must** send data to a secure backend API, which then handles the database connection.</p>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="jsonFile" className="block text-gray-700 text-sm font-bold mb-2">
-              Select JSON File:
-            </label>
-            <input
-              type="file"
-              id="jsonFile"
-              accept=".json"
-              onChange={handleJsonFileChange}
-              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-          </div>
-
-          <Button
-            onClick={handleJsonImport}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-150 ease-in-out shadow-md hover:shadow-lg"
-            disabled={isJsonProcessing || !jsonFile}
-          >
-            {isJsonProcessing ? (
-              <span className="flex items-center gap-2">
-                <RefreshCw className="h-4 w-4 animate-spin" /> Processing...
-              </span>
-            ) : (
-              "Process JSON Data"
-            )}
-          </Button>
-
-          {jsonImportMessage && (
-            <div className={`mt-4 p-3 rounded-md text-sm ${
-              jsonImportMessage.type === 'success' ? 'bg-green-100 text-green-700' :
-              jsonImportMessage.type === 'error' ? 'bg-red-100 text-red-700' :
-              'bg-blue-100 text-blue-700'
-            }`}>
-              {jsonImportMessage.text}
-            </div>
-          )}
-
-          {jsonPreviewContent && (
-            <div className="mt-6">
-              <h3 className="text-md font-semibold text-gray-700 mb-2">Parsed JSON Preview:</h3>
-              <pre className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-gray-800 text-sm overflow-auto max-h-48">
-                {jsonPreviewContent}
-              </pre>
-            </div>
-          )}
+          <input
+            type="file"
+            accept=".json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                handleJsonImport(file);
+              }
+            }}
+            className="block w-full text-sm text-gray-500 file:mr-2 file:py-2 file:px-4 file:rounded-md file:border file:border-gray-300 file:bg-gray-50 file:hover:bg-gray-100"
+          />
         </DialogContent>
       </Dialog>
-
 
       <AlertDialog open={deletePropertyId !== null} onOpenChange={(open) => !open && setDeletePropertyId(null)}>
         <AlertDialogContent>
@@ -910,7 +860,7 @@ export default function PropertiesPage() {
               Delete All Properties?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete <strong>ALL {properties.length} properties</strong> from your database.
+              This will permanently delete <strong>ALL {deduplicatedProperties.length} properties</strong> from your database.
               This action cannot be undone and will remove all property data, including images, descriptions, and associated records.
               <br /><br />
               Are you absolutely sure you want to proceed?
