@@ -69,18 +69,26 @@ interface ImportResponse {
 export default function PropertiesPage() {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
-  const [isImportDialogOpen, setIsImportDialogOpen] = useState<boolean>(false);
+  const [isImportCsvDialogOpen, setIsImportCsvDialogOpen] = useState<boolean>(false);
+  const [isImportJsonDialogOpen, setIsImportJsonDialogOpen] = useState<boolean>(false); // New state for JSON dialog
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
   const [showDeduplicateDialog, setShowDeduplicateDialog] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [isImporting, setIsImporting] = useState<boolean>(false);
+  const [isAutoImporting, setIsAutoImporting] = useState<boolean>(false); // Renamed for clarity
   const [isDeduplicating, setIsDeduplicating] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
   const [isSelectionMode, setIsSelectionMode] = useState<boolean>(false);
   const [selectedRowIds, setSelectedRowIds] = useState<Record<string, boolean>>({});
 
   const [timeRemaining, setTimeRemaining] = useState<number>(15 * 60);
+
+  // State for JSON import specific UI
+  const [jsonFile, setJsonFile] = useState<File | null>(null);
+  const [jsonImportMessage, setJsonImportMessage] = useState<{ text: string, type: 'info' | 'success' | 'error' } | null>(null);
+  const [isJsonProcessing, setIsJsonProcessing] = useState<boolean>(false);
+  const [jsonPreviewContent, setJsonPreviewContent] = useState<string>('');
+
 
   // Fetch properties
   const { data: rawProperties = [], isLoading, refetch } = useQuery<Property[]>({
@@ -109,7 +117,7 @@ export default function PropertiesPage() {
   // Auto-import mutation with enhanced error handling
   const autoImportMutation = useMutation<ImportResponse, Error>({
     mutationFn: async (): Promise<ImportResponse> => {
-      setIsImporting(true);
+      setIsAutoImporting(true);
       const result = await apiRequest("GET", "/api/import-properties");
       return result as ImportResponse;
     },
@@ -151,22 +159,22 @@ export default function PropertiesPage() {
       setTimeRemaining(15 * 60);
     },
     onSettled: () => {
-      setIsImporting(false);
+      setIsAutoImporting(false);
     },
   });
 
-  // Manual import function
+  // Manual auto-import function (from XML feed)
   const handleManualImport = async (): Promise<void> => {
-    if (!isImporting) {
+    if (!isAutoImporting) {
       autoImportMutation.mutate();
     }
   };
 
-  // Simple countdown timer effect
+  // Simple countdown timer effect for auto-import
   useEffect(() => {
     let interval: NodeJS.Timeout;
 
-    if (!isImporting && timeRemaining > 0) {
+    if (!isAutoImporting && timeRemaining > 0) {
       interval = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev <= 1) {
@@ -181,7 +189,7 @@ export default function PropertiesPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isImporting, timeRemaining, autoImportMutation]);
+  }, [isAutoImporting, timeRemaining, autoImportMutation]);
 
   // Format time as MM:SS
   const formatTime = (seconds: number): string => {
@@ -263,7 +271,7 @@ export default function PropertiesPage() {
       });
 
       // Delete duplicates
-      const deletePromises = propertiesToDelete.map(id => 
+      const deletePromises = propertiesToDelete.map(id =>
         deletePropertyMutation.mutateAsync(id)
       );
       const results = await Promise.allSettled(deletePromises);
@@ -334,7 +342,7 @@ export default function PropertiesPage() {
     const deduplicatedProperties = Array.isArray(rawProperties)
       ? [...rawProperties]
           .sort((a, b) => b.id - a.id)
-          .filter((property, index, self) => 
+          .filter((property, index, self) =>
             index === self.findIndex(p => p.reference === property.reference)
           )
       : [];
@@ -371,9 +379,87 @@ export default function PropertiesPage() {
       title: "Import Successful",
       description: `${data.length} properties have been imported.`,
     });
-    setIsImportDialogOpen(false);
+    setIsImportCsvDialogOpen(false);
     queryClient.invalidateQueries({ queryKey: ['/api/properties'] });
   };
+
+  // New JSON Import Logic
+  const handleJsonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files && event.target.files[0]) {
+      setJsonFile(event.target.files[0]);
+      setJsonImportMessage(null); // Clear previous messages
+      setJsonPreviewContent(''); // Clear previous preview
+    } else {
+      setJsonFile(null);
+    }
+  };
+
+  const handleJsonImport = () => {
+    if (!jsonFile) {
+      setJsonImportMessage({ text: 'Please select a JSON file to import.', type: 'error' });
+      return;
+    }
+
+    if (jsonFile.type !== 'application/json') {
+      setJsonImportMessage({ text: 'Please select a valid JSON file (.json).', type: 'error' });
+      return;
+    }
+
+    setIsJsonProcessing(true);
+    setJsonImportMessage({ text: 'Reading file...', type: 'info' });
+    setJsonPreviewContent('');
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const fileContent = e.target.result as string;
+        const jsonData = JSON.parse(fileContent);
+
+        setJsonPreviewContent(JSON.stringify(jsonData, null, 2));
+        setJsonImportMessage({ text: 'File parsed successfully. Simulating import...', type: 'info' });
+
+        // --- IMPORTANT SECURITY WARNING ---
+        // Directly connecting to a PostgreSQL database from client-side JavaScript
+        // (like in a browser) is HIGHLY INSECURE. Your database credentials
+        // would be exposed to anyone inspecting your web page.
+        //
+        // For a real-world application, this 'jsonData' should be sent to a
+        // SECURE BACKEND API. The backend would then handle the connection
+        // to your Neon PostgreSQL database using a server-side PostgreSQL client
+        // (e.g., psycopg2 in Python, node-postgres in Node.js) and perform the import.
+        //
+        // The code below SIMULATES a successful import for demonstration purposes
+        // of the frontend UI and JSON parsing. DO NOT use this for production
+        // with actual database credentials.
+        // --- END SECURITY WARNING ---
+
+        setTimeout(() => {
+          setIsJsonProcessing(false);
+          setJsonImportMessage({ text: 'JSON data processed and simulated as imported successfully!', type: 'success' });
+          console.log('Simulated JSON data for import:', jsonData);
+          // In a real scenario, you'd handle the actual database insertion here
+          // after receiving a success response from your secure backend.
+          // For now, we'll just close the dialog after a successful simulation.
+          // setIsImportJsonDialogOpen(false); // Uncomment to auto-close
+          // queryClient.invalidateQueries({ queryKey: ['/api/properties'] }); // Invalidate if actual data was imported
+        }, 2000); // Simulate 2-second network/processing delay
+
+      } catch (error) {
+        setIsJsonProcessing(false);
+        setJsonImportMessage({ text: `Error parsing JSON file: ${(error as Error).message}. Please ensure it's valid JSON.`, type: 'error' });
+        console.error('JSON parsing error:', error);
+      }
+    };
+
+    reader.onerror = () => {
+      setIsJsonProcessing(false);
+      setJsonImportMessage({ text: 'Error reading file. Please try again.', type: 'error' });
+    };
+
+    reader.readAsText(jsonFile);
+  };
+
 
   const propertyColumns: ColumnDef<Property>[] = [
     {
@@ -527,7 +613,7 @@ export default function PropertiesPage() {
   const properties = Array.isArray(rawProperties)
     ? [...rawProperties]
         .sort((a, b) => b.id - a.id)
-        .filter((property, index, self) => 
+        .filter((property, index, self) =>
           index === self.findIndex(p => p.reference === property.reference)
         )
     : [];
@@ -588,7 +674,7 @@ export default function PropertiesPage() {
               </span>
             )}
 
-            {isImporting ? (
+            {isAutoImporting ? (
               <div className="flex items-center gap-1 text-blue-600">
                 <RefreshCw className="h-3 w-3 animate-spin" />
                 <span className="text-xs font-medium">Importing...</span>
@@ -629,10 +715,10 @@ export default function PropertiesPage() {
             variant="outline"
             onClick={handleManualImport}
             className="flex items-center gap-2"
-            disabled={isImporting}
+            disabled={isAutoImporting}
           >
-            <Download className={`h-4 w-4 ${isImporting ? 'animate-spin' : ''}`} />
-            {isImporting ? "Importing..." : "Import Now"}
+            <Download className={`h-4 w-4 ${isAutoImporting ? 'animate-spin' : ''}`} />
+            {isAutoImporting ? "Importing..." : "Import Now"}
           </Button>
           <Button
             variant="outline"
@@ -644,11 +730,20 @@ export default function PropertiesPage() {
           </Button>
           <Button
             variant="outline"
-            onClick={() => setIsImportDialogOpen(true)}
+            onClick={() => setIsImportCsvDialogOpen(true)}
             className="flex items-center gap-2"
           >
             <FileUp className="h-4 w-4" />
             Import CSV
+          </Button>
+          {/* New Button for JSON Import */}
+          <Button
+            variant="outline"
+            onClick={() => setIsImportJsonDialogOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <FileUp className="h-4 w-4" />
+            Import JSON
           </Button>
           <Button
             variant="outline"
@@ -707,10 +802,10 @@ export default function PropertiesPage() {
         setRowSelection={setSelectedRowIds}
       />
 
-      <Dialog open={isImportDialogOpen} onOpenChange={setIsImportDialogOpen}>
+      <Dialog open={isImportCsvDialogOpen} onOpenChange={setIsImportCsvDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Import Properties</DialogTitle>
+            <DialogTitle>Import Properties (CSV)</DialogTitle>
             <DialogDescription>
               Upload a CSV file to import properties. The file should include all required fields.
             </DialogDescription>
@@ -727,6 +822,70 @@ export default function PropertiesPage() {
           />
         </DialogContent>
       </Dialog>
+
+      {/* New Dialog for JSON Import */}
+      <Dialog open={isImportJsonDialogOpen} onOpenChange={setIsImportJsonDialogOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Import Properties (JSON)</DialogTitle>
+            <DialogDescription>
+              Upload a JSON file to import properties.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-md relative mb-4 text-sm" role="alert">
+            <strong className="font-bold">Security Warning:</strong>
+            <span className="block sm:inline">Direct client-side database interaction is INSECURE.</span>
+            <p className="mt-1">This demonstration **simulates** the import. For a real application, you **must** send data to a secure backend API, which then handles the database connection.</p>
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="jsonFile" className="block text-gray-700 text-sm font-bold mb-2">
+              Select JSON File:
+            </label>
+            <input
+              type="file"
+              id="jsonFile"
+              accept=".json"
+              onChange={handleJsonFileChange}
+              className="shadow appearance-none border rounded-lg w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+          </div>
+
+          <Button
+            onClick={handleJsonImport}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg focus:outline-none focus:shadow-outline transition duration-150 ease-in-out shadow-md hover:shadow-lg"
+            disabled={isJsonProcessing || !jsonFile}
+          >
+            {isJsonProcessing ? (
+              <span className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin" /> Processing...
+              </span>
+            ) : (
+              "Process JSON Data"
+            )}
+          </Button>
+
+          {jsonImportMessage && (
+            <div className={`mt-4 p-3 rounded-md text-sm ${
+              jsonImportMessage.type === 'success' ? 'bg-green-100 text-green-700' :
+              jsonImportMessage.type === 'error' ? 'bg-red-100 text-red-700' :
+              'bg-blue-100 text-blue-700'
+            }`}>
+              {jsonImportMessage.text}
+            </div>
+          )}
+
+          {jsonPreviewContent && (
+            <div className="mt-6">
+              <h3 className="text-md font-semibold text-gray-700 mb-2">Parsed JSON Preview:</h3>
+              <pre className="bg-gray-50 p-4 rounded-lg border border-gray-200 text-gray-800 text-sm overflow-auto max-h-48">
+                {jsonPreviewContent}
+              </pre>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
 
       <AlertDialog open={deletePropertyId !== null} onOpenChange={(open) => !open && setDeletePropertyId(null)}>
         <AlertDialogContent>
