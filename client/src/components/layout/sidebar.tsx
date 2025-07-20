@@ -153,7 +153,7 @@ function SidebarContent({ routes }) {
       <div className="flex items-center justify-center h-16 bg-slate-300">
         <Link href="/">
           <span className="text-white text-xl font-semibold cursor-pointer">
-            <img src="https://nordstern.ae/logo_nordstern.svg" alt="" />
+            <img src="https://nordstern.ae/logo_nordstern.svg" alt="" className="w-44"/>
           </span>
         </Link>
       </div>
