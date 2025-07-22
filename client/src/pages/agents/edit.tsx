@@ -292,7 +292,7 @@ export default function AgentEditPage() {
                         name="phone"
                         render={({ field }) => (
                           <FormItem>
-                            <Form国王Label>Phone Number</FormLabel>
+                            <FormLabel>Phone Number</FormLabel>
                             <FormControl>
                               <Input
                                 placeholder="+971 50 123 4567"
