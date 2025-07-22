@@ -10,7 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgentFormValues } from "@/types";
-import imageCompression from 'browser-image-compression';
+import imageCompression from "browser-image-compression";
 import {
   Card,
   CardContent,
@@ -31,6 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { supabase } from "@/lib/supabase"; // Import centralized Supabase client
 
 // Zod schema for form validation
 const agentFormSchema = z.object({
@@ -65,31 +66,28 @@ const defaultValues: AgentFormValues = {
 
 // Image compression options
 const compressionOptions = {
-  maxSizeMB: 1, // Maximum file size in MB
-  maxWidthOrHeight: 1920, // Maximum width or height
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1920,
   useWebWorker: true,
   initialQuality: 0.8,
-  // No fileType specified - preserves original format
 };
 
-// Compression options for headshots (smaller size for avatars)
 const headshotCompressionOptions = {
   maxSizeMB: 0.5,
   maxWidthOrHeight: 800,
   useWebWorker: true,
   initialQuality: 0.8,
-  // No fileType specified - preserves original format
 };
 
 export default function AgentEditPage() {
   const [match, params] = useRoute("/agents/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
-  const [isCompressing, setIsCompressing] = useState<{headShot: boolean, photo: boolean}>({
-    headShot: false,
-    photo: false
-  });
-  
+  const [isCompressing, setIsCompressing] = useState<{
+    headShot: boolean;
+    photo: boolean;
+  }>({ headShot: false, photo: false });
+
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
 
@@ -128,67 +126,58 @@ export default function AgentEditPage() {
         headShot: agentData.headShot || "",
         photo: agentData.photo || "",
       };
-
       form.reset(formData);
     }
   }, [agentData, form, isNewAgent]);
 
-  // Image compression function
-  const compressAndConvertToBase64 = async (
-    file: File, 
+  // Compress and upload to Supabase Storage
+  const compressAndUploadToStorage = async (
+    file: File,
     options: typeof compressionOptions,
-    fieldType: 'headShot' | 'photo'
+    fieldType: "headShot" | "photo"
   ): Promise<string> => {
     try {
-      setIsCompressing(prev => ({ ...prev, [fieldType]: true }));
-      
-      console.log(`Original file size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-      console.log(`File type: ${file.type}`);
-      console.log('Compression options:', options);
-      
+      setIsCompressing((prev) => ({ ...prev, [fieldType]: true }));
+      console.log(`Original ${fieldType} size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
       // Compress the image
       const compressedFile = await imageCompression(file, options);
-      
-      console.log(`Compressed file size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-      console.log(`Compression ratio: ${((file.size - compressedFile.size) / file.size * 100).toFixed(1)}%`);
-      
-      // Show compression success message
+      console.log(`Compressed ${fieldType} size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
       toast({
         title: "Image Compressed",
         description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
       });
-      
-      // Convert to base64
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(compressedFile);
-      });
+
+      // Upload to Supabase Storage
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${fieldType}-${Date.now()}.${fileExt}`;
+      const { data, error } = await supabase.storage
+        .from("agent-images")
+        .upload(fileName, compressedFile, {
+          contentType: file.type,
+        });
+
+      if (error) {
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get the public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("agent-images")
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
     } catch (error) {
-      console.error('Image compression failed:', error);
+      console.error(`Failed to process ${fieldType}:`, error);
       toast({
-        title: "Compression Error",
-        description: `Failed to compress image: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        title: "Error",
+        description: `Failed to process ${fieldType}: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
       });
-      
-      // Fallback: convert original file to base64 without compression
-      console.log('Falling back to original file without compression');
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          resolve(result);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      return "";
     } finally {
-      setIsCompressing(prev => ({ ...prev, [fieldType]: false }));
+      setIsCompressing((prev) => ({ ...prev, [fieldType]: false }));
     }
   };
 
@@ -196,17 +185,13 @@ export default function AgentEditPage() {
   const handleHeadshotChange = async (value: string | File) => {
     if (value instanceof File) {
       try {
-        const compressedBase64 = await compressAndConvertToBase64(
-          value, 
-          headshotCompressionOptions,
-          'headShot'
-        );
-        form.setValue('headShot', compressedBase64);
+        const url = await compressAndUploadToStorage(value, headshotCompressionOptions, "headShot");
+        if (url) form.setValue("headShot", url);
       } catch (error) {
-        // Error already handled in compression function
+        // Error handled in compressAndUploadToStorage
       }
     } else {
-      form.setValue('headShot', value);
+      form.setValue("headShot", value);
     }
   };
 
@@ -214,23 +199,20 @@ export default function AgentEditPage() {
   const handlePhotoChange = async (value: string | File) => {
     if (value instanceof File) {
       try {
-        const compressedBase64 = await compressAndConvertToBase64(
-          value, 
-          compressionOptions,
-          'photo'
-        );
-        form.setValue('photo', compressedBase64);
+        const url = await compressAndUploadToStorage(value, compressionOptions, "photo");
+        if (url) form.setValue("photo", url);
       } catch (error) {
-        // Error already handled in compression function
+        // Error handled in compressAndUploadToStorage
       }
     } else {
-      form.setValue('photo', value);
+      form.setValue("photo", value);
     }
   };
 
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
+      console.log("Payload size:", (JSON.stringify(data).length / 1024 / 1024).toFixed(2), "MB"); // Debug payload size
       if (isNewAgent) {
         return apiRequest("POST", "/api/agents", data);
       } else {
@@ -251,7 +233,7 @@ export default function AgentEditPage() {
       console.error("Failed to save agent:", error);
       toast({
         title: "Error",
-        description: `Failed to ${isNewAgent ? "create" : "update"} agent. Please try again.`,
+        description: `Failed to ${isNewAgent ? "create" : "update"} agent: ${error.message || "Please try again"}`,
         variant: "destructive",
       });
     },
@@ -323,7 +305,7 @@ export default function AgentEditPage() {
                             />
                           </FormControl>
                           <FormDescription>
-                            Images will be automatically compressed for optimal performance
+                            Images will be compressed and uploaded to storage
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -549,13 +531,13 @@ export default function AgentEditPage() {
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page. Images will be automatically compressed for optimal performance.
+                        This full-size photo will be uploaded to storage and displayed on the agent's profile page.
                       </FormDescription>
                       <FormMessage />
                       {isCompressing.photo && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Compressing image...
+                          Compressing and uploading image...
                         </div>
                       )}
                     </FormItem>
