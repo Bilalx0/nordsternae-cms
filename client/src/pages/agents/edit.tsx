@@ -109,8 +109,8 @@ export default function AgentEditPage() {
     }
   }, [agentData, form, isNewAgent]);
 
-  // Function to compress and convert image to WebP
-  const compressAndConvertImage = async (
+  // Function to compress image
+  const compressImage = async (
     file: File
   ): Promise<{ compressedFile: File; base64: string }> => {
     try {
@@ -119,7 +119,6 @@ export default function AgentEditPage() {
         maxSizeMB: 1, // Target size in MB
         maxWidthOrHeight: 1920, // Max dimension
         useWebWorker: true,
-        fileType: "image/webp", // Convert to WebP
       };
 
       const compressedFile = await imageCompression(file, options);
@@ -228,7 +227,7 @@ export default function AgentEditPage() {
                               onChange={async (file) => {
                                 try {
                                   if (file) {
-                                    const { base64 } = await compressAndConvertImage(file);
+                                    const { base64 } = await compressImage(file);
                                     field.onChange(base64);
                                   } else {
                                     field.onChange("");
@@ -245,7 +244,7 @@ export default function AgentEditPage() {
                             />
                           </FormControl>
                           <FormDescription>
-                            Image will be compressed and converted to WebP.
+                            Image will be compressed to reduce file size.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -481,7 +480,7 @@ export default function AgentEditPage() {
                           onChange={async (file) => {
                             try {
                               if (file) {
-                                const { base64 } = await compressAndConvertImage(file);
+                                const { base64 } = await compressImage(file);
                                 field.onChange(base64);
                               } else {
                                 field.onChange("");
@@ -498,7 +497,7 @@ export default function AgentEditPage() {
                         />
                       </FormControl>
                       <FormDescription>
-                        Image will be compressed and converted to WebP.
+                        Image will be compressed to reduce file size.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
