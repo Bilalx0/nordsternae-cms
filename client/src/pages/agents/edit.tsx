@@ -142,8 +142,21 @@ export default function AgentEditPage() {
     try {
       setIsCompressing(prev => ({ ...prev, [fieldType]: true }));
       
+      console.log(`Original file size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      console.log(`File type: ${file.type}`);
+      console.log('Compression options:', options);
+      
       // Compress the image
       const compressedFile = await imageCompression(file, options);
+      
+      console.log(`Compressed file size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+      console.log(`Compression ratio: ${((file.size - compressedFile.size) / file.size * 100).toFixed(1)}%`);
+      
+      // Show compression success message
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
       
       // Convert to base64
       return new Promise((resolve, reject) => {
@@ -159,10 +172,21 @@ export default function AgentEditPage() {
       console.error('Image compression failed:', error);
       toast({
         title: "Compression Error",
-        description: "Failed to compress image. Please try with a different image.",
+        description: `Failed to compress image: ${error instanceof Error ? error.message : 'Unknown error'}`,
         variant: "destructive",
       });
-      throw error;
+      
+      // Fallback: convert original file to base64 without compression
+      console.log('Falling back to original file without compression');
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
     } finally {
       setIsCompressing(prev => ({ ...prev, [fieldType]: false }));
     }
