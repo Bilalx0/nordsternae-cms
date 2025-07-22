@@ -505,36 +505,53 @@ export default function AgentEditPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Media</CardTitle>
-                <CardDescription>Upload additional images and media for the agent</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="photo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Profile Photo (Full Size)</FormLabel>
-                      <FormControl>
-                        <FileInput
-                          label={isCompressingImage ? "Compressing..." : "Upload Photo"}
-                          value={field.value}
-                          onChange={handlePhotoChange}
-                          accept="image/*"
-                          disabled={isCompressingImage}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+           <Card>
+  <CardHeader>
+    <CardTitle>Media</CardTitle>
+    <CardDescription>Upload additional images and media for the agent</CardDescription>
+  </CardHeader>
+  <CardContent>
+    <FormField
+      control={form.control}
+      name="photo"
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>Profile Photo (Full Size)</FormLabel>
+          <FormControl>
+            <FileInput
+              label={isCompressingImage ? "Compressing..." : "Upload Photo"}
+              value={field.value}
+              onChange={handlePhotoChange}
+              accept="image/*"
+              disabled={isCompressingImage}
+            />
+          </FormControl>
+          <FormDescription>
+            This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
+          </FormDescription>
+          {field.value && (
+            <div className="mt-4">
+              <img
+                src={field.value}
+                alt="Profile Photo Preview"
+                className="max-w-xs h-auto rounded-md"
+                onError={() => {
+                  toast({
+                    title: "Image Preview Error",
+                    description: "Unable to display the image preview. Please try uploading a different image.",
+                    variant: "destructive",
+                  });
+                  form.setValue("photo", "");
+                }}
+              />
+            </div>
+          )}
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  </CardContent>
+</Card>
 
             <div className="flex justify-end">
               <Button
