@@ -10,6 +10,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgentFormValues } from "@/types";
+import imageCompression from 'browser-image-compression';
 import {
   Card,
   CardContent,
@@ -62,10 +63,33 @@ const defaultValues: AgentFormValues = {
   photo: "",
 };
 
+// Image compression options
+const compressionOptions = {
+  maxSizeMB: 1, // Maximum file size in MB
+  maxWidthOrHeight: 1920, // Maximum width or height
+  useWebWorker: true,
+  fileType: 'image/jpeg' as const,
+  initialQuality: 0.8,
+};
+
+// Compression options for headshots (smaller size for avatars)
+const headshotCompressionOptions = {
+  maxSizeMB: 0.5,
+  maxWidthOrHeight: 800,
+  useWebWorker: true,
+  fileType: 'image/jpeg' as const,
+  initialQuality: 0.8,
+};
+
 export default function AgentEditPage() {
   const [match, params] = useRoute("/agents/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
+  const [isCompressing, setIsCompressing] = useState<{headShot: boolean, photo: boolean}>({
+    headShot: false,
+    photo: false
+  });
+  
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
 
@@ -108,6 +132,77 @@ export default function AgentEditPage() {
       form.reset(formData);
     }
   }, [agentData, form, isNewAgent]);
+
+  // Image compression function
+  const compressAndConvertToBase64 = async (
+    file: File, 
+    options: typeof compressionOptions,
+    fieldType: 'headShot' | 'photo'
+  ): Promise<string> => {
+    try {
+      setIsCompressing(prev => ({ ...prev, [fieldType]: true }));
+      
+      // Compress the image
+      const compressedFile = await imageCompression(file, options);
+      
+      // Convert to base64
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          resolve(result);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(compressedFile);
+      });
+    } catch (error) {
+      console.error('Image compression failed:', error);
+      toast({
+        title: "Compression Error",
+        description: "Failed to compress image. Please try with a different image.",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsCompressing(prev => ({ ...prev, [fieldType]: false }));
+    }
+  };
+
+  // Enhanced file input handler for headshot
+  const handleHeadshotChange = async (value: string | File) => {
+    if (value instanceof File) {
+      try {
+        const compressedBase64 = await compressAndConvertToBase64(
+          value, 
+          headshotCompressionOptions,
+          'headShot'
+        );
+        form.setValue('headShot', compressedBase64);
+      } catch (error) {
+        // Error already handled in compression function
+      }
+    } else {
+      form.setValue('headShot', value);
+    }
+  };
+
+  // Enhanced file input handler for photo
+  const handlePhotoChange = async (value: string | File) => {
+    if (value instanceof File) {
+      try {
+        const compressedBase64 = await compressAndConvertToBase64(
+          value, 
+          compressionOptions,
+          'photo'
+        );
+        form.setValue('photo', compressedBase64);
+      } catch (error) {
+        // Error already handled in compression function
+      }
+    } else {
+      form.setValue('photo', value);
+    }
+  };
 
   // Save agent mutation
   const saveMutation = useMutation({
@@ -174,12 +269,19 @@ export default function AgentEditPage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
-                    <Avatar className="h-32 w-32">
-                      <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
-                      <AvatarFallback className="text-2xl">
-                        {form.watch("name")?.charAt(0) || "A"}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar className="h-32 w-32">
+                        <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
+                        <AvatarFallback className="text-2xl">
+                          {form.watch("name")?.charAt(0) || "A"}
+                        </AvatarFallback>
+                      </Avatar>
+                      {isCompressing.headShot && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
+                          <Loader2 className="h-6 w-6 animate-spin text-white" />
+                        </div>
+                      )}
+                    </div>
 
                     <FormField
                       control={form.control}
@@ -189,12 +291,16 @@ export default function AgentEditPage() {
                           <FormLabel>Profile Picture</FormLabel>
                           <FormControl>
                             <FileInput
-                              label="Upload Picture"
+                              label={isCompressing.headShot ? "Compressing..." : "Upload Picture"}
                               value={field.value}
-                              onChange={field.onChange}
+                              onChange={handleHeadshotChange}
                               accept="image/*"
+                              disabled={isCompressing.headShot}
                             />
                           </FormControl>
+                          <FormDescription>
+                            Images will be automatically compressed for optimal performance
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -411,16 +517,23 @@ export default function AgentEditPage() {
                       <FormLabel>Profile Photo (Full Size)</FormLabel>
                       <FormControl>
                         <FileInput
-                          label="Upload Photo"
+                          label={isCompressing.photo ? "Compressing..." : "Upload Photo"}
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handlePhotoChange}
                           accept="image/*"
+                          disabled={isCompressing.photo}
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page
+                        This full-size photo will be displayed on the agent's profile page. Images will be automatically compressed for optimal performance.
                       </FormDescription>
                       <FormMessage />
+                      {isCompressing.photo && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Compressing image...
+                        </div>
+                      )}
                     </FormItem>
                   )}
                 />
@@ -433,12 +546,13 @@ export default function AgentEditPage() {
                 variant="outline"
                 onClick={() => navigate("/agents")}
                 className="mr-2"
+                disabled={isCompressing.headShot || isCompressing.photo}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || isCompressing.headShot || isCompressing.photo}
                 className="flex items-center gap-2"
               >
                 {saveMutation.isPending ? (
