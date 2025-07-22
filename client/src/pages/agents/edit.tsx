@@ -151,7 +151,7 @@ export default function AgentEditPage() {
       const fileExt = file.name.split(".").pop();
       const fileName = `${fieldType}-${Date.now()}.${fileExt}`;
       const { data, error } = await supabase.storage
-        .from("agents-images")
+        .from("agents-image")
         .upload(fileName, compressedFile, {
           contentType: file.type,
         });
@@ -159,7 +159,7 @@ export default function AgentEditPage() {
       if (error) throw new Error(`Storage upload failed: ${error.message}`);
 
       const { data: publicUrlData } = supabase.storage
-        .from("agents-images")
+        .from("agents-image")
         .getPublicUrl(fileName);
       console.log(`Uploaded ${fieldType} URL:`, publicUrlData.publicUrl);
 
