@@ -10,7 +10,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgentFormValues } from "@/types";
-import imageCompression from "browser-image-compression";
 import {
   Card,
   CardContent,
@@ -63,32 +62,10 @@ const defaultValues: AgentFormValues = {
   photo: "",
 };
 
-// Image compression options
-const compressionOptions = {
-  maxSizeMB: 1, // Maximum file size in MB
-  maxWidthOrHeight: 1920, // Maximum width or height
-  useWebWorker: true, // Use web worker for better performance
-  quality: 0.8, // Image quality (0-1)
-};
-
-// Compression options for headshot (smaller since it's used as avatar)
-const headshotCompressionOptions = {
-  maxSizeMB: 0.5,
-  maxWidthOrHeight: 800,
-  useWebWorker: true,
-  quality: 0.8,
-};
-
 export default function AgentEditPage() {
   const [match, params] = useRoute("/agents/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
-  const [isCompressingImage, setIsCompressingImage] = useState(false);
-  const [previewImages, setPreviewImages] = useState({
-    headShot: "",
-    photo: ""
-  });
-  
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
 
@@ -129,104 +106,8 @@ export default function AgentEditPage() {
       };
 
       form.reset(formData);
-      
-      // Set preview images
-      setPreviewImages({
-        headShot: agentData.headShot || "",
-        photo: agentData.photo || ""
-      });
     }
   }, [agentData, form, isNewAgent]);
-
-  // Image compression helper function
-  const compressImage = async (file: File, isHeadshot: boolean = false): Promise<string> => {
-    try {
-      setIsCompressingImage(true);
-      
-      const options = isHeadshot ? headshotCompressionOptions : compressionOptions;
-      const compressedFile = await imageCompression(file, options);
-      
-      // Convert compressed file to base64 data URL
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(compressedFile);
-      });
-    } catch (error) {
-      console.error('Error compressing image:', error);
-      toast({
-        title: "Compression Error",
-        description: "Failed to compress image. Please try with a different image.",
-        variant: "destructive",
-      });
-      throw error;
-    } finally {
-      setIsCompressingImage(false);
-    }
-  };
-
-  // Enhanced file input handler for headshot
-  const handleHeadshotChange = async (file: File | null) => {
-    if (!file) {
-      form.setValue("headShot", "");
-      setPreviewImages(prev => ({ ...prev, headShot: "" }));
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const compressedDataUrl = await compressImage(file, true);
-      form.setValue("headShot", compressedDataUrl);
-      setPreviewImages(prev => ({ ...prev, headShot: compressedDataUrl }));
-      
-      toast({
-        title: "Image Compressed",
-        description: `Image compressed successfully. Original: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-    } catch (error) {
-      // Error already handled in compressImage function
-    }
-  };
-
-  // Enhanced file input handler for photo
-  const handlePhotoChange = async (file: File | null) => {
-    if (!file) {
-      form.setValue("photo", "");
-      setPreviewImages(prev => ({ ...prev, photo: "" }));
-      return;
-    }
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select an image file.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const compressedDataUrl = await compressImage(file, false);
-      form.setValue("photo", compressedDataUrl);
-      setPreviewImages(prev => ({ ...prev, photo: compressedDataUrl }));
-      
-      toast({
-        title: "Image Compressed",
-        description: `Image compressed successfully. Original: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-    } catch (error) {
-      // Error already handled in compressImage function
-    }
-  };
 
   // Save agent mutation
   const saveMutation = useMutation({
@@ -294,10 +175,7 @@ export default function AgentEditPage() {
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <Avatar className="h-32 w-32">
-                      <AvatarImage 
-                        src={previewImages.headShot || form.watch("headShot")} 
-                        alt={form.watch("name")} 
-                      />
+                      <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
                       <AvatarFallback className="text-2xl">
                         {form.watch("name")?.charAt(0) || "A"}
                       </AvatarFallback>
@@ -311,16 +189,12 @@ export default function AgentEditPage() {
                           <FormLabel>Profile Picture</FormLabel>
                           <FormControl>
                             <FileInput
-                              label={isCompressingImage ? "Compressing..." : "Upload Picture"}
-                              value=""
-                              onChange={handleHeadshotChange}
+                              label="Upload Picture"
+                              value={field.value}
+                              onChange={field.onChange}
                               accept="image/*"
-                              disabled={isCompressingImage}
                             />
                           </FormControl>
-                          <FormDescription>
-                            Images will be automatically compressed for optimal performance
-                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -537,34 +411,15 @@ export default function AgentEditPage() {
                       <FormLabel>Profile Photo (Full Size)</FormLabel>
                       <FormControl>
                         <FileInput
-                          label={isCompressingImage ? "Compressing..." : "Upload Photo"}
-                          value=""
-                          onChange={handlePhotoChange}
+                          label="Upload Photo"
+                          value={field.value}
+                          onChange={field.onChange}
                           accept="image/*"
-                          disabled={isCompressingImage}
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
+                        This full-size photo will be displayed on the agent's profile page
                       </FormDescription>
-                      {(previewImages.photo || field.value) && (
-                        <div className="mt-4">
-                          <img
-                            src={previewImages.photo || field.value}
-                            alt="Profile Photo Preview"
-                            className="max-w-xs h-auto rounded-md"
-                            onError={() => {
-                              toast({
-                                title: "Image Preview Error",
-                                description: "Unable to display the image preview. Please try uploading a different image.",
-                                variant: "destructive",
-                              });
-                              form.setValue("photo", "");
-                              setPreviewImages(prev => ({ ...prev, photo: "" }));
-                            }}
-                          />
-                        </div>
-                      )}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -578,21 +433,20 @@ export default function AgentEditPage() {
                 variant="outline"
                 onClick={() => navigate("/agents")}
                 className="mr-2"
-                disabled={isCompressingImage}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={saveMutation.isPending || isCompressingImage}
+                disabled={saveMutation.isPending}
                 className="flex items-center gap-2"
               >
-                {saveMutation.isPending || isCompressingImage ? (
+                {saveMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                {isCompressingImage ? "Compressing..." : "Save Agent"}
+                Save Agent
               </Button>
             </div>
           </form>
