@@ -505,36 +505,52 @@ export default function AgentEditPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Media</CardTitle>
-                <CardDescription>Upload additional images and media for the agent</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="photo"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Profile Photo (Full Size)</FormLabel>
-                      <FormControl>
-                        <FileInput
-                          label={isCompressingImage ? "Compressing..." : "Upload Photo"}
-                          value={field.value}
-                          onChange={handlePhotoChange}
-                          accept="image/*"
-                          disabled={isCompressingImage}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
+           <Card>
+  <CardHeader>
+    <CardTitle>Media</CardTitle>
+    <CardDescription>Upload additional images and media for the agent</CardDescription>
+  </CardHeader>
+  <CardContent className="space-y-4">
+    <div className="flex flex-col sm:flex-row gap-8 items-start">
+      <div className="w-full max-w-xs flex flex-col items-center space-y-4">
+        {form.watch("photo") ? (
+          <img
+            src={form.watch("photo")}
+            alt="Agent Profile Photo"
+            className="h-48 w-full object-cover rounded-md border border-gray-200"
+          />
+        ) : (
+          <div className="h-48 w-full flex items-center justify-center bg-gray-100 rounded-md border border-gray-200">
+            <span className="text-gray-500">No photo uploaded</span>
+          </div>
+        )}
+
+        <FormField
+          control={form.control}
+          name="photo"
+          render={({ field }) => (
+            <FormItem className="w-full">
+              <FormLabel>Profile Photo (Full Size)</FormLabel>
+              <FormControl>
+                <FileInput
+                  label={isCompressingImage ? "Compressing..." : "Upload Photo"}
+                  value={field.value}
+                  onChange={handlePhotoChange}
+                  accept="image/*"
+                  disabled={isCompressingImage}
                 />
-              </CardContent>
-            </Card>
+              </FormControl>
+              <FormDescription>
+                This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      </div>
+    </div>
+  </CardContent>
+</Card>
 
             <div className="flex justify-end">
               <Button
