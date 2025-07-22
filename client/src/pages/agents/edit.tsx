@@ -68,8 +68,8 @@ const compressionOptions = {
   maxSizeMB: 1, // Maximum file size in MB
   maxWidthOrHeight: 1920, // Maximum width or height
   useWebWorker: true,
-  fileType: 'image/jpeg' as const,
   initialQuality: 0.8,
+  // No fileType specified - preserves original format
 };
 
 // Compression options for headshots (smaller size for avatars)
@@ -77,8 +77,8 @@ const headshotCompressionOptions = {
   maxSizeMB: 0.5,
   maxWidthOrHeight: 800,
   useWebWorker: true,
-  fileType: 'image/jpeg' as const,
   initialQuality: 0.8,
+  // No fileType specified - preserves original format
 };
 
 export default function AgentEditPage() {
