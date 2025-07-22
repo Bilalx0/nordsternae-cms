@@ -45,8 +45,8 @@ const agentFormSchema = z.object({
   experience: z.number().int().min(0).optional(),
   introduction: z.string().optional(),
   linkedin: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
-  headShot: z.string().optional(),
-  photo: z.string().optional(),
+  headShot: z.string().optional(), // Assuming string URLs for now
+  photo: z.string().optional(),   // Assuming string URLs for now
 });
 
 const defaultValues: AgentFormValues = {
@@ -83,10 +83,10 @@ export default function AgentEditPage() {
   const [match, params] = useRoute("/agents/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
-  const [isCompressing, setIsCompressing] = useState<{
-    headShot: boolean;
-    photo: boolean;
-  }>({ headShot: false, photo: false });
+  const [isCompressing, setIsCompressing] = useState<{ headShot: boolean; photo: boolean }>({
+    headShot: false,
+    photo: false,
+  });
 
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
@@ -212,7 +212,7 @@ export default function AgentEditPage() {
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
-      console.log("Payload size:", (JSON.stringify(data).length / 1024 / 1024).toFixed(2), "MB"); // Debug payload size
+      console.log("Payload size:", (JSON.stringify(data).length / 1024 / 1024).toFixed(2), "MB");
       if (isNewAgent) {
         return apiRequest("POST", "/api/agents", data);
       } else {
