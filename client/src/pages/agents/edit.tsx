@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { supabase } from "@/lib/supabase"; // Import centralized Supabase client
+import { supabase } from "@/lib/supabase";
 
 // Zod schema for form validation
 const agentFormSchema = z.object({
@@ -140,7 +140,6 @@ export default function AgentEditPage() {
       setIsCompressing((prev) => ({ ...prev, [fieldType]: true }));
       console.log(`Original ${fieldType} size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
 
-      // Compress the image
       const compressedFile = await imageCompression(file, options);
       console.log(`Compressed ${fieldType} size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
 
@@ -149,7 +148,6 @@ export default function AgentEditPage() {
         description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
       });
 
-      // Upload to Supabase Storage
       const fileExt = file.name.split(".").pop();
       const fileName = `${fieldType}-${Date.now()}.${fileExt}`;
       const { data, error } = await supabase.storage
@@ -158,14 +156,12 @@ export default function AgentEditPage() {
           contentType: file.type,
         });
 
-      if (error) {
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
+      if (error) throw new Error(`Storage upload failed: ${error.message}`);
 
-      // Get the public URL
       const { data: publicUrlData } = supabase.storage
         .from("agent-images")
         .getPublicUrl(fileName);
+      console.log(`Uploaded ${fieldType} URL:`, publicUrlData.publicUrl);
 
       return publicUrlData.publicUrl;
     } catch (error) {
@@ -186,9 +182,10 @@ export default function AgentEditPage() {
     if (value instanceof File) {
       try {
         const url = await compressAndUploadToStorage(value, headshotCompressionOptions, "headShot");
+        console.log(`Headshot URL set: ${url}`);
         if (url) form.setValue("headShot", url);
       } catch (error) {
-        // Error handled in compressAndUploadToStorage
+        console.error("Headshot upload error:", error);
       }
     } else {
       form.setValue("headShot", value);
@@ -200,9 +197,10 @@ export default function AgentEditPage() {
     if (value instanceof File) {
       try {
         const url = await compressAndUploadToStorage(value, compressionOptions, "photo");
+        console.log(`Photo URL set: ${url}`);
         if (url) form.setValue("photo", url);
       } catch (error) {
-        // Error handled in compressAndUploadToStorage
+        console.error("Photo upload error:", error);
       }
     } else {
       form.setValue("photo", value);
@@ -212,7 +210,9 @@ export default function AgentEditPage() {
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
-      console.log("Payload size:", (JSON.stringify(data).length / 1024 / 1024).toFixed(2), "MB");
+      const payload = JSON.stringify(data, null, 2);
+      console.log("Full payload:", payload);
+      console.log("Payload size:", (new TextEncoder().encode(payload).length / 1024 / 1024).toFixed(2), "MB");
       if (isNewAgent) {
         return apiRequest("POST", "/api/agents", data);
       } else {
@@ -240,6 +240,7 @@ export default function AgentEditPage() {
   });
 
   const onSubmit = (data: z.infer<typeof agentFormSchema>) => {
+    console.log("Form data before submission:", data);
     saveMutation.mutate(data as AgentFormValues);
   };
 
