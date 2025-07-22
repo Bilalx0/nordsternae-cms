@@ -84,6 +84,11 @@ export default function AgentEditPage() {
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const [isCompressingImage, setIsCompressingImage] = useState(false);
+  const [previewImages, setPreviewImages] = useState({
+    headShot: "",
+    photo: ""
+  });
+  
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
 
@@ -124,6 +129,12 @@ export default function AgentEditPage() {
       };
 
       form.reset(formData);
+      
+      // Set preview images
+      setPreviewImages({
+        headShot: agentData.headShot || "",
+        photo: agentData.photo || ""
+      });
     }
   }, [agentData, form, isNewAgent]);
 
@@ -159,6 +170,7 @@ export default function AgentEditPage() {
   const handleHeadshotChange = async (file: File | null) => {
     if (!file) {
       form.setValue("headShot", "");
+      setPreviewImages(prev => ({ ...prev, headShot: "" }));
       return;
     }
 
@@ -174,6 +186,7 @@ export default function AgentEditPage() {
     try {
       const compressedDataUrl = await compressImage(file, true);
       form.setValue("headShot", compressedDataUrl);
+      setPreviewImages(prev => ({ ...prev, headShot: compressedDataUrl }));
       
       toast({
         title: "Image Compressed",
@@ -188,6 +201,7 @@ export default function AgentEditPage() {
   const handlePhotoChange = async (file: File | null) => {
     if (!file) {
       form.setValue("photo", "");
+      setPreviewImages(prev => ({ ...prev, photo: "" }));
       return;
     }
 
@@ -203,6 +217,7 @@ export default function AgentEditPage() {
     try {
       const compressedDataUrl = await compressImage(file, false);
       form.setValue("photo", compressedDataUrl);
+      setPreviewImages(prev => ({ ...prev, photo: compressedDataUrl }));
       
       toast({
         title: "Image Compressed",
@@ -279,7 +294,10 @@ export default function AgentEditPage() {
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <Avatar className="h-32 w-32">
-                      <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
+                      <AvatarImage 
+                        src={previewImages.headShot || form.watch("headShot")} 
+                        alt={form.watch("name")} 
+                      />
                       <AvatarFallback className="text-2xl">
                         {form.watch("name")?.charAt(0) || "A"}
                       </AvatarFallback>
@@ -294,7 +312,7 @@ export default function AgentEditPage() {
                           <FormControl>
                             <FileInput
                               label={isCompressingImage ? "Compressing..." : "Upload Picture"}
-                              value={field.value}
+                              value=""
                               onChange={handleHeadshotChange}
                               accept="image/*"
                               disabled={isCompressingImage}
@@ -505,53 +523,54 @@ export default function AgentEditPage() {
               </CardContent>
             </Card>
 
-           <Card>
-  <CardHeader>
-    <CardTitle>Media</CardTitle>
-    <CardDescription>Upload additional images and media for the agent</CardDescription>
-  </CardHeader>
-  <CardContent>
-    <FormField
-      control={form.control}
-      name="photo"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel>Profile Photo (Full Size)</FormLabel>
-          <FormControl>
-            <FileInput
-              label={isCompressingImage ? "Compressing..." : "Upload Photo"}
-              value={field.value}
-              onChange={handlePhotoChange}
-              accept="image/*"
-              disabled={isCompressingImage}
-            />
-          </FormControl>
-          <FormDescription>
-            This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
-          </FormDescription>
-          {field.value && (
-            <div className="mt-4">
-              <img
-                src={field.value}
-                alt="Profile Photo Preview"
-                className="max-w-xs h-auto rounded-md"
-                onError={() => {
-                  toast({
-                    title: "Image Preview Error",
-                    description: "Unable to display the image preview. Please try uploading a different image.",
-                    variant: "destructive",
-                  });
-                  form.setValue("photo", "");
-                }}
-              />
-            </div>
-          )}
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  </CardContent>
-</Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Media</CardTitle>
+                <CardDescription>Upload additional images and media for the agent</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="photo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Profile Photo (Full Size)</FormLabel>
+                      <FormControl>
+                        <FileInput
+                          label={isCompressingImage ? "Compressing..." : "Upload Photo"}
+                          value=""
+                          onChange={handlePhotoChange}
+                          accept="image/*"
+                          disabled={isCompressingImage}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
+                      </FormDescription>
+                      {(previewImages.photo || field.value) && (
+                        <div className="mt-4">
+                          <img
+                            src={previewImages.photo || field.value}
+                            alt="Profile Photo Preview"
+                            className="max-w-xs h-auto rounded-md"
+                            onError={() => {
+                              toast({
+                                title: "Image Preview Error",
+                                description: "Unable to display the image preview. Please try uploading a different image.",
+                                variant: "destructive",
+                              });
+                              form.setValue("photo", "");
+                              setPreviewImages(prev => ({ ...prev, photo: "" }));
+                            }}
+                          />
+                        </div>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
 
             <div className="flex justify-end">
               <Button
