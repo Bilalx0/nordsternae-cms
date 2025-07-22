@@ -1,18 +1,4 @@
-return (
-    <div className="space-y-2">
-      <input
-        type="file"
-        onChange={handleFileChange}
-        accept={accept}
-        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50"
-        disabled={isProcessing}
-        {...props}
-      />
-      
-      {isProcessing && (
-        <div className="space-y-2">
-          <div className="flex items-center text-sm text-gray-600">
-            <Loader2 classNameimport { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashLayout } from "@/components/layout/dash-layout";
@@ -23,8 +9,8 @@ import { FileInput } from "@/components/ui/file-input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import imageCompression from 'browser-image-compression';
 import { AgentFormValues } from "@/types";
+import imageCompression from "browser-image-compression";
 import {
   Card,
   CardContent,
@@ -46,201 +32,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
-// Browser-image-compression utility function
-const compressImageFile = async (file: File): Promise<string> => {
-  try {
-    // Check if it's an image file
-    const isImage = file.type.startsWith('image/') || 
-                   /\.(jpg|jpeg|png|gif|bmp|webp|avif|heic)$/i.test(file.name);
-    
-    if (!isImage) {
-      // For non-image files, convert to base64 directly
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string || '');
-        reader.onerror = () => resolve('');
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // Compression options
-    const options = {
-      maxSizeMB: 0.5, // Maximum file size in MB
-      maxWidthOrHeight: 1920, // Maximum width or height
-      useWebWorker: true, // Use web worker for better performance
-      fileType: 'image/jpeg', // Convert to JPEG for better compression
-      initialQuality: 0.8, // Initial quality
-      alwaysKeepResolution: false, // Allow resolution reduction
-    };
-
-    // Compress the image
-    const compressedFile = await imageCompression(file, options);
-    
-    // Convert compressed file to base64
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string || '');
-      reader.onerror = () => {
-        // Fallback: return original file as base64
-        const fallbackReader = new FileReader();
-        fallbackReader.onload = (e) => resolve(e.target?.result as string || '');
-        fallbackReader.onerror = () => resolve('');
-        fallbackReader.readAsDataURL(file);
-      };
-      reader.readAsDataURL(compressedFile);
-    });
-
-  } catch (error) {
-    console.debug('Compression completed with fallback');
-    // Fallback: return original file as base64
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string || '');
-      reader.onerror = () => resolve('');
-      reader.readAsDataURL(file);
-    });
-  }
-};
-
-// Enhanced file input component with browser-image-compression
-const CompressedFileInput = ({ 
-  label, 
-  value, 
-  onChange, 
-  accept = "*/*",
-  ...props 
-}: {
-  label: string;
-  value?: string;
-  onChange: (value: string) => void;
-  accept?: string;
-  [key: string]: any;
-}) => {
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [compressionInfo, setCompressionInfo] = useState<{
-    originalSize: number;
-    compressedSize: number;
-    compressionRatio: number;
-  } | null>(null);
-  
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-  
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    setIsProcessing(true);
-    setCompressionInfo(null);
-    
-    try {
-      const originalSize = file.size;
-      
-      // Use browser-image-compression
-      const compressedBase64 = await compressImageFile(file);
-      
-      // Calculate compressed size (approximate from base64)
-      const compressedSize = Math.round(compressedBase64.length * 0.75);
-      const compressionRatio = originalSize > 0 ? ((originalSize - compressedSize) / originalSize * 100) : 0;
-      
-      setCompressionInfo({
-        originalSize,
-        compressedSize,
-        compressionRatio: Math.max(0, compressionRatio)
-      });
-      
-      onChange(compressedBase64);
-      
-      // Clear compression info after 5 seconds
-      setTimeout(() => {
-        setCompressionInfo(null);
-      }, 5000);
-      
-    } catch (error) {
-      console.debug('File processing completed');
-      // Fallback: convert file to base64 directly
-      const reader = new FileReader();
-      reader.onload = (e) => onChange(e.target?.result as string || '');
-      reader.onerror = () => onChange('');
-      reader.readAsDataURL(file);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-  
-  return (
-    <div className="space-y-2">
-      <input
-        type="file"
-        onChange={handleFileChange}
-        accept={accept}
-        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100 disabled:opacity-50"
-        disabled={isProcessing}
-        {...props}
-      />
-      
-      {isProcessing && (
-        <div className="flex items-center text-sm text-blue-600">
-          <Loader2 className="h-3 w-3 animate-spin mr-2" />
-          Compressing image...
-        </div>
-      )}
-      
-      {compressionInfo && !isProcessing && (
-        <div className="text-xs text-green-600 bg-green-50 p-2 rounded border">
-          <div className="flex justify-between items-center">
-            <span>✓ Compressed successfully</span>
-            <span className="font-medium">
-              {compressionInfo.compressionRatio.toFixed(1)}% reduction
-            </span>
-          </div>
-          <div className="flex justify-between text-gray-600 mt-1">
-            <span>Original: {formatFileSize(compressionInfo.originalSize)}</span>
-            <span>Compressed: {formatFileSize(compressionInfo.compressedSize)}</span>
-          </div>
-        </div>
-      )}
-      
-      {value && !isProcessing && !compressionInfo && (
-        <div className="text-sm text-green-600">
-          File ready ✓
-        </div>
-      )}
-    </div>
-  );
-};
-  
-  return (
-    <div className="space-y-2">
-      <input
-        type="file"
-        onChange={handleFileChange}
-        accept={accept}
-        className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-        disabled={isProcessing}
-        {...props}
-      />
-      {isProcessing && (
-        <div className="flex items-center text-sm text-gray-500">
-          <Loader2 className="h-3 w-3 animate-spin mr-1" />
-          Processing file...
-        </div>
-      )}
-      {value && !isProcessing && (
-        <div className="text-sm text-green-600">
-          File ready ✓
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Zod schema for form validation (removed file restrictions)
+// Zod schema for form validation
 const agentFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
@@ -271,10 +63,27 @@ const defaultValues: AgentFormValues = {
   photo: "",
 };
 
+// Image compression options
+const compressionOptions = {
+  maxSizeMB: 1, // Maximum file size in MB
+  maxWidthOrHeight: 1920, // Maximum width or height
+  useWebWorker: true, // Use web worker for better performance
+  quality: 0.8, // Image quality (0-1)
+};
+
+// Compression options for headshot (smaller since it's used as avatar)
+const headshotCompressionOptions = {
+  maxSizeMB: 0.5,
+  maxWidthOrHeight: 800,
+  useWebWorker: true,
+  quality: 0.8,
+};
+
 export default function AgentEditPage() {
   const [match, params] = useRoute("/agents/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
 
@@ -317,6 +126,92 @@ export default function AgentEditPage() {
       form.reset(formData);
     }
   }, [agentData, form, isNewAgent]);
+
+  // Image compression helper function
+  const compressImage = async (file: File, isHeadshot: boolean = false): Promise<string> => {
+    try {
+      setIsCompressingImage(true);
+      
+      const options = isHeadshot ? headshotCompressionOptions : compressionOptions;
+      const compressedFile = await imageCompression(file, options);
+      
+      // Convert compressed file to base64 data URL
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(compressedFile);
+      });
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      toast({
+        title: "Compression Error",
+        description: "Failed to compress image. Please try with a different image.",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsCompressingImage(false);
+    }
+  };
+
+  // Enhanced file input handler for headshot
+  const handleHeadshotChange = async (file: File | null) => {
+    if (!file) {
+      form.setValue("headShot", "");
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const compressedDataUrl = await compressImage(file, true);
+      form.setValue("headShot", compressedDataUrl);
+      
+      toast({
+        title: "Image Compressed",
+        description: `Image compressed successfully. Original: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+    } catch (error) {
+      // Error already handled in compressImage function
+    }
+  };
+
+  // Enhanced file input handler for photo
+  const handlePhotoChange = async (file: File | null) => {
+    if (!file) {
+      form.setValue("photo", "");
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please select an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const compressedDataUrl = await compressImage(file, false);
+      form.setValue("photo", compressedDataUrl);
+      
+      toast({
+        title: "Image Compressed",
+        description: `Image compressed successfully. Original: ${(file.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+    } catch (error) {
+      // Error already handled in compressImage function
+    }
+  };
 
   // Save agent mutation
   const saveMutation = useMutation({
@@ -397,13 +292,17 @@ export default function AgentEditPage() {
                         <FormItem className="w-full">
                           <FormLabel>Profile Picture</FormLabel>
                           <FormControl>
-                            <CompressedFileInput
-                              label="Upload Picture"
+                            <FileInput
+                              label={isCompressingImage ? "Compressing..." : "Upload Picture"}
                               value={field.value}
-                              onChange={field.onChange}
-                              accept="*/*"
+                              onChange={handleHeadshotChange}
+                              accept="image/*"
+                              disabled={isCompressingImage}
                             />
                           </FormControl>
+                          <FormDescription>
+                            Images will be automatically compressed for optimal performance
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -619,15 +518,16 @@ export default function AgentEditPage() {
                     <FormItem>
                       <FormLabel>Profile Photo (Full Size)</FormLabel>
                       <FormControl>
-                        <CompressedFileInput
-                          label="Upload Photo"
+                        <FileInput
+                          label={isCompressingImage ? "Compressing..." : "Upload Photo"}
                           value={field.value}
-                          onChange={field.onChange}
-                          accept="*/*"
+                          onChange={handlePhotoChange}
+                          accept="image/*"
+                          disabled={isCompressingImage}
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed using browser-image-compression for optimal performance.
+                        This full-size photo will be displayed on the agent's profile page. Images are automatically compressed for optimal performance.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -642,20 +542,21 @@ export default function AgentEditPage() {
                 variant="outline"
                 onClick={() => navigate("/agents")}
                 className="mr-2"
+                disabled={isCompressingImage}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || isCompressingImage}
                 className="flex items-center gap-2"
               >
-                {saveMutation.isPending ? (
+                {saveMutation.isPending || isCompressingImage ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                Save Agent
+                {isCompressingImage ? "Compressing..." : "Save Agent"}
               </Button>
             </div>
           </form>
