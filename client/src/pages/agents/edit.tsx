@@ -30,6 +30,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import imageCompression from "browser-image-compression";
 
 // Zod schema for form validation
 const agentFormSchema = z.object({
@@ -104,10 +105,37 @@ export default function AgentEditPage() {
         headShot: agentData.headShot || "",
         photo: agentData.photo || "",
       };
-
       form.reset(formData);
     }
   }, [agentData, form, isNewAgent]);
+
+  // Function to compress and convert image to WebP
+  const compressAndConvertImage = async (
+    file: File
+  ): Promise<{ compressedFile: File; base64: string }> => {
+    try {
+      // Compress image
+      const options = {
+        maxSizeMB: 1, // Target size in MB
+        maxWidthOrHeight: 1920, // Max dimension
+        useWebWorker: true,
+        fileType: "image/webp", // Convert to WebP
+      };
+
+      const compressedFile = await imageCompression(file, options);
+
+      // Convert to base64 for form submission
+      const base64 = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsDataURL(compressedFile);
+      });
+
+      return { compressedFile, base64 };
+    } catch (error) {
+      throw new Error(`Image processing failed: ${error.message}`);
+    }
+  };
 
   // Save agent mutation
   const saveMutation = useMutation({
@@ -146,7 +174,9 @@ export default function AgentEditPage() {
     <DashLayout
       title={isNewAgent ? "Add New Agent" : "Edit Agent"}
       description={
-        isNewAgent ? "Create a new agent profile" : `Editing agent: ${form.watch("name") || "Loading..."}`
+        isNewAgent
+          ? "Create a new agent profile"
+          : `Editing agent: ${form.watch("name") || "Loading..."}`
       }
     >
       <Button
@@ -169,13 +199,18 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
-                <CardDescription>Enter the agent's basic information</CardDescription>
+                <CardDescription>
+                  Enter the agent's basic information
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <Avatar className="h-32 w-32">
-                      <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
+                      <AvatarImage
+                        src={form.watch("headShot")}
+                        alt={form.watch("name")}
+                      />
                       <AvatarFallback className="text-2xl">
                         {form.watch("name")?.charAt(0) || "A"}
                       </AvatarFallback>
@@ -190,11 +225,28 @@ export default function AgentEditPage() {
                           <FormControl>
                             <FileInput
                               label="Upload Picture"
-                              value={field.value}
-                              onChange={field.onChange}
+                              onChange={async (file) => {
+                                try {
+                                  if (file) {
+                                    const { base64 } = await compressAndConvertImage(file);
+                                    field.onChange(base64);
+                                  } else {
+                                    field.onChange("");
+                                  }
+                                } catch (error) {
+                                  toast({
+                                    title: "Error",
+                                    description: error.message,
+                                    variant: "destructive",
+                                  });
+                                }
+                              }}
                               accept="image/*"
                             />
                           </FormControl>
+                          <FormDescription>
+                            Image will be compressed and converted to WebP.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -224,7 +276,11 @@ export default function AgentEditPage() {
                           <FormItem>
                             <FormLabel>Email</FormLabel>
                             <FormControl>
-                              <Input type="email" placeholder="john@nordstern.ae" {...field} />
+                              <Input
+                                type="email"
+                                placeholder="john@nordstern.ae"
+                                {...field}
+                              />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -236,7 +292,7 @@ export default function AgentEditPage() {
                         name="phone"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Phone Number</FormLabel>
+                            <Form国王Label>Phone Number</FormLabel>
                             <FormControl>
                               <Input
                                 placeholder="+971 50 123 4567"
@@ -263,7 +319,9 @@ export default function AgentEditPage() {
                               value={field.value || ""}
                             />
                           </FormControl>
-                          <FormDescription>LinkedIn profile URL of the agent</FormDescription>
+                          <FormDescription>
+                            LinkedIn profile URL of the agent
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -276,7 +334,9 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Professional Details</CardTitle>
-                <CardDescription>Enter the agent's professional information</CardDescription>
+                <CardDescription>
+                  Enter the agent's professional information
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -365,7 +425,9 @@ export default function AgentEditPage() {
                             type="number"
                             placeholder="5"
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                            onChange={(e) =>
+                              field.onChange(parseInt(e.target.value) || 0)
+                            }
                             value={field.value || ""}
                           />
                         </FormControl>
@@ -389,7 +451,9 @@ export default function AgentEditPage() {
                           value={field.value || ""}
                         />
                       </FormControl>
-                      <FormDescription>This text will be displayed on the agent's profile page</FormDescription>
+                      <FormDescription>
+                        This text will be displayed on the agent's profile page
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -400,7 +464,9 @@ export default function AgentEditPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Media</CardTitle>
-                <CardDescription>Upload additional images and media for the agent</CardDescription>
+                <CardDescription>
+                  Upload additional images and media for the agent
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
@@ -412,13 +478,27 @@ export default function AgentEditPage() {
                       <FormControl>
                         <FileInput
                           label="Upload Photo"
-                          value={field.value}
-                          onChange={field.onChange}
+                          onChange={async (file) => {
+                            try {
+                              if (file) {
+                                const { base64 } = await compressAndConvertImage(file);
+                                field.onChange(base64);
+                              } else {
+                                field.onChange("");
+                              }
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: error.message,
+                                variant: "destructive",
+                              });
+                            }
+                          }}
                           accept="image/*"
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be displayed on the agent's profile page
+                        Image will be compressed and converted to WebP.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
