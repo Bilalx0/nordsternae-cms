@@ -5,9 +5,8 @@ import { DashLayout } from "@/components/layout/dash-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FileInput } from "@/components/ui/file-input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgentFormValues } from "@/types";
 import imageCompression from "browser-image-compression";
@@ -45,8 +44,8 @@ const agentFormSchema = z.object({
   experience: z.number().int().min(0).optional(),
   introduction: z.string().optional(),
   linkedin: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
-  headShot: z.string().optional(), // Assuming string URLs for now
-  photo: z.string().optional(),   // Assuming string URLs for now
+  headShot: z.string().optional(),
+  photo: z.string().optional(),
 });
 
 const defaultValues: AgentFormValues = {
@@ -77,6 +76,75 @@ const headshotCompressionOptions = {
   maxWidthOrHeight: 800,
   useWebWorker: true,
   initialQuality: 0.8,
+};
+
+// Custom File Input Component
+const CustomFileInput = ({ 
+  label, 
+  value, 
+  onChange, 
+  accept, 
+  disabled, 
+  isCompressing 
+}: {
+  label: string;
+  value?: string;
+  onChange: (file: File | null) => void;
+  accept?: string;
+  disabled?: boolean;
+  isCompressing?: boolean;
+}) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    onChange(file);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 px-4 py-2 border border-input rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50">
+          <input
+            type="file"
+            className="hidden"
+            accept={accept}
+            onChange={handleFileChange}
+            disabled={disabled || isCompressing}
+          />
+          {isCompressing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {label}
+            </>
+          ) : (
+            <>
+              <Upload className="h-4 w-4" />
+              {label}
+            </>
+          )}
+        </label>
+        {value && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClear}
+            disabled={disabled || isCompressing}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+      {value && (
+        <div className="text-sm text-muted-foreground">
+          Current: {value.split('/').pop()}
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default function AgentEditPage() {
@@ -140,6 +208,7 @@ export default function AgentEditPage() {
       setIsCompressing((prev) => ({ ...prev, [fieldType]: true }));
       console.log(`Original ${fieldType} size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
 
+      // Compress the image
       const compressedFile = await imageCompression(file, options);
       console.log(`Compressed ${fieldType} size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
 
@@ -148,75 +217,102 @@ export default function AgentEditPage() {
         description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
       });
 
+      // Generate unique filename
       const fileExt = file.name.split(".").pop();
-      const fileName = `${fieldType}-${Date.now()}.${fileExt}`;
+      const fileName = `${fieldType}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      
+      // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from("agents-image")
         .upload(fileName, compressedFile, {
-          contentType: file.type,
+          contentType: compressedFile.type,
+          upsert: false, // Don't overwrite existing files
         });
 
-      if (error) throw new Error(`Storage upload failed: ${error.message}`);
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
 
+      // Get public URL
       const { data: publicUrlData } = supabase.storage
         .from("agents-image")
         .getPublicUrl(fileName);
-      console.log(`Uploaded ${fieldType} URL:`, publicUrlData.publicUrl);
 
-      return publicUrlData.publicUrl;
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded ${fieldType} URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: `${fieldType} uploaded successfully`,
+      });
+
+      return publicUrl;
     } catch (error) {
       console.error(`Failed to process ${fieldType}:`, error);
       toast({
-        title: "Error",
-        description: `Failed to process ${fieldType}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        title: "Upload Failed",
+        description: `Failed to upload ${fieldType}: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
       });
-      return "";
+      throw error; // Re-throw to handle in caller
     } finally {
       setIsCompressing((prev) => ({ ...prev, [fieldType]: false }));
     }
   };
 
-  // Enhanced file input handler for headshot
-  const handleHeadshotChange = async (value: string | File) => {
-    if (value instanceof File) {
-      try {
-        const url = await compressAndUploadToStorage(value, headshotCompressionOptions, "headShot");
-        console.log(`Headshot URL set: ${url}`);
-        if (url) form.setValue("headShot", url);
-      } catch (error) {
-        console.error("Headshot upload error:", error);
-      }
-    } else {
-      form.setValue("headShot", value);
+  // Handle headshot file selection
+  const handleHeadshotChange = async (file: File | null) => {
+    if (!file) {
+      form.setValue("headShot", "");
+      return;
+    }
+
+    try {
+      const url = await compressAndUploadToStorage(file, headshotCompressionOptions, "headShot");
+      form.setValue("headShot", url);
+      console.log(`Headshot URL set: ${url}`);
+    } catch (error) {
+      console.error("Headshot upload error:", error);
+      // Don't set the value if upload failed
     }
   };
 
-  // Enhanced file input handler for photo
-  const handlePhotoChange = async (value: string | File) => {
-    if (value instanceof File) {
-      try {
-        const url = await compressAndUploadToStorage(value, compressionOptions, "photo");
-        console.log(`Photo URL set: ${url}`);
-        if (url) form.setValue("photo", url);
-      } catch (error) {
-        console.error("Photo upload error:", error);
-      }
-    } else {
-      form.setValue("photo", value);
+  // Handle photo file selection
+  const handlePhotoChange = async (file: File | null) => {
+    if (!file) {
+      form.setValue("photo", "");
+      return;
+    }
+
+    try {
+      const url = await compressAndUploadToStorage(file, compressionOptions, "photo");
+      form.setValue("photo", url);
+      console.log(`Photo URL set: ${url}`);
+    } catch (error) {
+      console.error("Photo upload error:", error);
+      // Don't set the value if upload failed
     }
   };
 
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
-      const payload = JSON.stringify(data, null, 2);
-      console.log("Full payload:", payload);
-      console.log("Payload size:", (new TextEncoder().encode(payload).length / 1024 / 1024).toFixed(2), "MB");
+      // Ensure we're only sending URLs, not base64 data
+      const cleanData = {
+        ...data,
+        headShot: data.headShot || "",
+        photo: data.photo || "",
+      };
+
+      console.log("Submitting clean data:", cleanData);
+      console.log("HeadShot URL:", cleanData.headShot);
+      console.log("Photo URL:", cleanData.photo);
+
       if (isNewAgent) {
-        return apiRequest("POST", "/api/agents", data);
+        return apiRequest("POST", "/api/agents", cleanData);
       } else {
-        return apiRequest("PUT", `/api/agents/${agentId}`, data);
+        return apiRequest("PUT", `/api/agents/${agentId}`, cleanData);
       }
     },
     onSuccess: () => {
@@ -241,6 +337,26 @@ export default function AgentEditPage() {
 
   const onSubmit = (data: z.infer<typeof agentFormSchema>) => {
     console.log("Form data before submission:", data);
+    
+    // Double check that we don't have base64 data
+    if (data.headShot && data.headShot.startsWith('data:')) {
+      toast({
+        title: "Error",
+        description: "Please wait for headshot upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (data.photo && data.photo.startsWith('data:')) {
+      toast({
+        title: "Error",
+        description: "Please wait for photo upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+
     saveMutation.mutate(data as AgentFormValues);
   };
 
@@ -297,16 +413,17 @@ export default function AgentEditPage() {
                         <FormItem className="w-full">
                           <FormLabel>Profile Picture</FormLabel>
                           <FormControl>
-                            <FileInput
+                            <CustomFileInput
                               label={isCompressing.headShot ? "Compressing..." : "Upload Picture"}
                               value={field.value}
                               onChange={handleHeadshotChange}
                               accept="image/*"
                               disabled={isCompressing.headShot}
+                              isCompressing={isCompressing.headShot}
                             />
                           </FormControl>
                           <FormDescription>
-                            Images will be compressed and uploaded to storage
+                            Images will be compressed and uploaded to Supabase storage
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -523,16 +640,17 @@ export default function AgentEditPage() {
                     <FormItem>
                       <FormLabel>Profile Photo (Full Size)</FormLabel>
                       <FormControl>
-                        <FileInput
+                        <CustomFileInput
                           label={isCompressing.photo ? "Compressing..." : "Upload Photo"}
                           value={field.value}
                           onChange={handlePhotoChange}
                           accept="image/*"
                           disabled={isCompressing.photo}
+                          isCompressing={isCompressing.photo}
                         />
                       </FormControl>
                       <FormDescription>
-                        This full-size photo will be uploaded to storage and displayed on the agent's profile page.
+                        This full-size photo will be uploaded to Supabase storage and displayed on the agent's profile page.
                       </FormDescription>
                       <FormMessage />
                       {isCompressing.photo && (
