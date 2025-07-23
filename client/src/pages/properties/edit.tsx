@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch.jsx";
 import { Checkbox } from "@/components/ui/checkbox.jsx";
 import { FileInput } from "@/components/ui/file-input.jsx";
 import { apiRequest, queryClient } from "@/lib/queryClient.js";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast.js";
 import { PropertyFormValues } from "@/types/index.js";
 import { 
@@ -38,7 +38,10 @@ import {
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import imageCompression from "browser-image-compression";
+import { supabase } from "@/lib/supabase";
 
+// Zod schema for form validation
 const propertyFormSchema = z.object({
   reference: z.string().min(3, "Reference must be at least 3 characters"),
   listingType: z.string(),
@@ -116,12 +119,223 @@ const amenitiesList = [
   "Children's Pool"
 ];
 
+// Image compression options
+const imageCompressionOptions = {
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1920,
+  useWebWorker: true,
+  initialQuality: 0.8,
+};
+
+// FileInput Component
+const FileInput = ({
+  label,
+  value,
+  onChange,
+  accept,
+  multiple = false,
+  maxFiles = 1,
+  disabled = false,
+  isCompressing = false,
+}: {
+  label: string;
+  value?: string | string[];
+  onChange: (value: string | string[] | null) => void;
+  accept?: string;
+  multiple?: boolean;
+  maxFiles?: number;
+  disabled?: boolean;
+  isCompressing?: boolean;
+}) => {
+  const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
+
+  const compressAndUpload = async (file: File): Promise<string> => {
+    try {
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      // Compress the image
+      const compressedFile = await imageCompression(file, imageCompressionOptions);
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      // Generate unique filename
+      const fileExt = file.name.split(".").pop();
+      const bucket = "properties-image";
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded image URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: "Image uploaded successfully",
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process image:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    const limitedFiles = fileArray.slice(0, maxFiles);
+
+    if (multiple) {
+      const urls: string[] = [];
+      for (const file of limitedFiles) {
+        try {
+          const url = await compressAndUpload(file);
+          urls.push(url);
+        } catch (error) {
+          console.error("Failed to upload file:", error);
+        }
+      }
+      onChange(urls);
+    } else {
+      try {
+        const url = await compressAndUpload(limitedFiles[0]);
+        onChange(url);
+      } catch (error) {
+        console.error("Failed to upload file:", error);
+      }
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (disabled || isCompressing) return;
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(e.target.files);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+  };
+
+  const currentValue = Array.isArray(value) ? value : value ? [value] : [];
+
+  return (
+    <div className="space-y-4">
+      <div
+        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+          dragActive
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-muted-foreground/50"
+        } ${disabled || isCompressing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={() => !disabled && !isCompressing && document.getElementById(`file-input-${label}`)?.click()}
+      >
+        <input
+          id={`file-input-${label}`}
+          type="file"
+          className="hidden"
+          accept={accept}
+          multiple={multiple}
+          onChange={handleChange}
+          disabled={disabled || isCompressing}
+        />
+        <div className="flex flex-col items-center gap-2">
+          {isCompressing ? (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Compressing and uploading...</p>
+            </>
+          ) : (
+            <>
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm font-medium">{label}</p>
+              <p className="text-xs text-muted-foreground">
+                Drag and drop or click to browse
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+      {currentValue.length > 0 && (
+        <div className="space-y-2">
+          {currentValue.map((val, index) => (
+            <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm truncate">
+                  {val.split("/").pop() || "Uploaded image"}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClear}
+                disabled={disabled || isCompressing}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function PropertyEditPage() {
   const [match, params] = useRoute("/properties/:id");
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
   const isNewProperty = !match || params?.id === "new";
   const propertyId = isNewProperty ? null : parseInt(params?.id || "");
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [imagesPreview, setImagesPreview] = useState<string[]>([]);
 
   // Fetch agents for the dropdown
   const { data: agents = [], isLoading: isLoadingAgents } = useQuery({
@@ -150,7 +364,7 @@ export default function PropertyEditPage() {
     defaultValues,
   });
 
-  // Populate form when property data is loaded
+  // Populate form and preview when property data is loaded
   useEffect(() => {
     if (propertyData && !isNewProperty) {
       console.log("Populating form with property data:", propertyData);
@@ -205,6 +419,7 @@ export default function PropertyEditPage() {
 
       // Reset the form with the new data
       form.reset(formData);
+      setImagesPreview(Array.isArray(propertyData.images) ? propertyData.images : propertyData.images ? [propertyData.images] : []);
     }
   }, [propertyData, form, isNewProperty]);
 
@@ -246,6 +461,14 @@ export default function PropertyEditPage() {
 
   const onSubmit = (data: z.infer<typeof propertyFormSchema>) => {
     console.log("Form submitted with data:", data);
+    if (data.images?.some((url) => url.startsWith("data:"))) {
+      toast({
+        title: "Error",
+        description: "Please wait for all images to upload",
+        variant: "destructive",
+      });
+      return;
+    }
     saveMutation.mutate(data as PropertyFormValues);
   };
 
@@ -267,6 +490,93 @@ export default function PropertyEditPage() {
       : [...currentAmenities, amenity];
     
     form.setValue('amenities', newAmenities.join(','));
+  };
+
+  // Handle image changes
+  const handleImagesChange = async (value: string | string[] | null) => {
+    if (!value) {
+      form.setValue("images", []);
+      setImagesPreview([]);
+      return;
+    }
+    setIsCompressing(true);
+    const urls = Array.isArray(value) ? value : [value];
+    const newUrls: string[] = [];
+    for (const val of urls) {
+      try {
+        const url = await compressAndUpload(val);
+        newUrls.push(url);
+      } catch (error) {
+        console.error("Failed to upload image:", error);
+      }
+    }
+    form.setValue("images", newUrls);
+    setImagesPreview(newUrls);
+    setIsCompressing(false);
+  };
+
+  // Compress and upload a single image
+  const compressAndUpload = async (fileUrl: string): Promise<string> => {
+    const response = await fetch(fileUrl);
+    const blob = await response.blob();
+    const file = new File([blob], "image.jpg", { type: blob.type });
+
+    try {
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+      const compressedFile = await imageCompression(file, imageCompressionOptions);
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      const fileExt = file.name.split(".").pop();
+      const bucket = "properties-image";
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded image URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: "Image uploaded successfully",
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process image:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  // Handle image removal
+  const handleRemoveImage = (index: number) => {
+    const updatedImages = form.getValues("images")?.filter((_, i) => i !== index) || [];
+    const updatedPreviews = imagesPreview.filter((_, i) => i !== index);
+    form.setValue("images", updatedImages);
+    setImagesPreview(updatedPreviews);
   };
 
   return (
@@ -881,6 +1191,28 @@ export default function PropertyEditPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {imagesPreview.length > 0 && (
+                  <div className="mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {imagesPreview.map((url, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={url}
+                            alt={`Property Image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-md border"
+                          />
+                          <button
+                            type="button"
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveImage(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <FormField
                   control={form.control}
                   name="images"
@@ -891,14 +1223,16 @@ export default function PropertyEditPage() {
                         <FileInput
                           label="Upload Images"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handleImagesChange}
                           accept="image/*"
                           multiple={true}
                           maxFiles={10}
+                          disabled={isCompressing}
+                          isCompressing={isCompressing}
                         />
                       </FormControl>
                       <FormDescription>
-                        Upload up to 10 images of the property
+                        Upload up to 10 images of the property, compressed and uploaded to Supabase
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -1023,12 +1357,13 @@ export default function PropertyEditPage() {
                 variant="outline"
                 onClick={() => setLocation("/properties")}
                 className="mr-2"
+                disabled={isCompressing}
               >
                 Cancel
               </Button>
               <Button 
                 type="submit"
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || isCompressing}
                 className="flex items-center gap-2"
               >
                 {saveMutation.isPending ? (

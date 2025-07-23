@@ -836,11 +836,11 @@ export default function NeighborhoodEditPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {bannerImageValue && (
-                <div className="relative group mb-4">
+                <div className="relative group mb-4 w-56">
                   <img
                     src={bannerImageValue}
                     alt="Banner Preview"
-                    className="w-full max-w-md h-auto object-cover rounded-md border"
+                    className="w-full h-32 object-cover rounded-md border"
                   />
                   {!isCompressing.bannerImage && (
                     <button
@@ -928,11 +928,11 @@ export default function NeighborhoodEditPage() {
               />
 
               {neighbourImageValue && (
-                <div className="relative group mb-4">
+                <div className="relative group mb-4 w-56">
                   <img
                     src={neighbourImageValue}
                     alt="Neighbor Image Preview"
-                    className="w-full max-w-xs h-auto object-cover rounded-md border"
+                    className="w-full h-32 object-cover rounded-md border"
                   />
                   {!isCompressing.neighbourImage && (
                     <button
