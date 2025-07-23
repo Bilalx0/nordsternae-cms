@@ -165,7 +165,7 @@ const FileInput = ({
 
       // Generate unique filename
       const fileExt = file.name.split(".").pop();
-      const bucket = "properties-image";
+      const bucket = "property-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       // Upload to Supabase Storage
@@ -532,7 +532,7 @@ export default function PropertyEditPage() {
       });
 
       const fileExt = file.name.split(".").pop();
-      const bucket = "properties-image";
+      const bucket = "property-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       const { data, error } = await supabase.storage

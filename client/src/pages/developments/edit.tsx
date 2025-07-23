@@ -134,7 +134,7 @@ const FileInput = ({
       });
 
       const fileExt = file.name.split(".").pop();
-      const bucket = "developments-image";
+      const bucket = "development-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
@@ -496,7 +496,7 @@ export default function DevelopmentEditPage() {
       });
 
       const fileExt = file.name.split(".").pop();
-      const bucket = "developments-image";
+      const bucket = "development-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       const { data, error } = await supabase.storage
