@@ -1,42 +1,29 @@
-import { useState, useEffect } from "react";
-import { useLocation, useRoute } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { DashLayout } from "@/components/layout/dash-layout";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-import { ArticleFormValues } from "@/types";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import imageCompression from "browser-image-compression";
-import { supabase } from "@/lib/supabase";
+"use client"
+
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { useLocation, useRoute } from "wouter"
+import { useQuery, useMutation, QueryClient } from "@tanstack/react-query"
+import { DashLayout } from "@/components/layout/dash-layout"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { ArrowLeft, Save, Loader2, Upload, X } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+import type { ArticleFormValues } from "@/types"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import imageCompression from "browser-image-compression"
+import { supabase } from "@/lib/supabase"
+import { apiRequest } from "@/lib/apiRequest" // Import apiRequest
+
+const queryClient = new QueryClient() // Declare queryClient
 
 // Zod schema for form validation
 const articleFormSchema = z.object({
@@ -55,7 +42,7 @@ const articleFormSchema = z.object({
   isDisabled: z.boolean().optional(),
   isFeatured: z.boolean().optional(),
   superFeature: z.boolean().optional(),
-});
+})
 
 const defaultValues: ArticleFormValues = {
   title: "",
@@ -73,7 +60,7 @@ const defaultValues: ArticleFormValues = {
   isDisabled: false,
   isFeatured: false,
   superFeature: false,
-};
+}
 
 const articleCategories = [
   "Market News",
@@ -84,7 +71,7 @@ const articleCategories = [
   "Market Trends",
   "Dubai Regulations",
   "Featured Properties",
-];
+]
 
 // Image compression options
 const tileCompressionOptions = {
@@ -92,14 +79,45 @@ const tileCompressionOptions = {
   maxWidthOrHeight: 800,
   useWebWorker: true,
   initialQuality: 0.8,
-};
+}
 
 const inlineCompressionOptions = {
   maxSizeMB: 1,
   maxWidthOrHeight: 1920,
   useWebWorker: true,
   initialQuality: 0.8,
-};
+}
+
+// Image Preview Component
+const ImagePreview = ({
+  src,
+  alt,
+  onRemove,
+  className = "",
+}: {
+  src: string
+  alt: string
+  onRemove: () => void
+  className?: string
+}) => {
+  return (
+    <div className={`relative group ${className}`}>
+      <img
+        src={src || "/placeholder.svg"}
+        alt={alt}
+        className="w-full h-full object-cover rounded-lg border shadow-sm"
+      />
+      <button
+        type="button"
+        className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-lg"
+        onClick={onRemove}
+        title="Remove image"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
 
 // FileInput Component
 const FileInput = ({
@@ -112,224 +130,188 @@ const FileInput = ({
   disabled = false,
   isCompressing = false,
 }: {
-  label: string;
-  value?: string | string[];
-  onChange: (value: string | string[] | null) => void;
-  accept?: string;
-  multiple?: boolean;
-  maxFiles?: number;
-  disabled?: boolean;
-  isCompressing?: boolean;
+  label: string
+  value?: string | string[]
+  onChange: (value: string | string[] | null) => void
+  accept?: string
+  multiple?: boolean
+  maxFiles?: number
+  disabled?: boolean
+  isCompressing?: boolean
 }) => {
-  const [dragActive, setDragActive] = useState(false);
-  const { toast } = useToast();
+  const [dragActive, setDragActive] = useState(false)
+  const { toast } = useToast()
 
   const compressAndUpload = async (file: File): Promise<string> => {
     try {
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`)
       // Compress the image
-      const options = label.includes("Tile Image") ? tileCompressionOptions : inlineCompressionOptions;
-      const compressedFile = await imageCompression(file, options);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+      const options = label.includes("Tile Image") ? tileCompressionOptions : inlineCompressionOptions
+      const compressedFile = await imageCompression(file, options)
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`)
 
       toast({
         title: "Image Compressed",
         description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
+      })
 
       // Generate unique filename
-      const fileExt = file.name.split(".").pop();
-      const bucket = "article-images";
-      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const fileExt = file.name.split(".").pop()
+      const bucket = "article-images"
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
 
       // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from(bucket)
-        .upload(fileName, compressedFile, {
-          contentType: compressedFile.type,
-          upsert: false,
-        });
+      const { data, error } = await supabase.storage.from(bucket).upload(fileName, compressedFile, {
+        contentType: compressedFile.type,
+        upsert: false,
+      })
 
       if (error) {
-        console.error("Supabase upload error:", error);
-        throw new Error(`Storage upload failed: ${error.message}`);
+        console.error("Supabase upload error:", error)
+        throw new Error(`Storage upload failed: ${error.message}`)
       }
 
       // Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from(bucket)
-        .getPublicUrl(fileName);
+      const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(fileName)
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
+      const publicUrl = publicUrlData.publicUrl
+      console.log(`Uploaded image URL:`, publicUrl)
 
       toast({
         title: "Upload Successful",
         description: "Image uploaded successfully",
-      });
+      })
 
-      return publicUrl;
+      return publicUrl
     } catch (error) {
-      console.error("Failed to process image:", error);
+      console.error("Failed to process image:", error)
       toast({
         title: "Upload Failed",
         description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
-      });
-      throw error;
+      })
+      throw error
     }
-  };
+  }
 
   const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) return
 
-    const fileArray = Array.from(files);
-    const limitedFiles = fileArray.slice(0, maxFiles);
+    const fileArray = Array.from(files)
+    const limitedFiles = fileArray.slice(0, maxFiles)
 
     if (multiple) {
-      const urls: string[] = [];
+      const currentUrls = Array.isArray(value) ? value : []
+      const urls: string[] = [...currentUrls]
+
       for (const file of limitedFiles) {
         try {
-          const url = await compressAndUpload(file);
-          urls.push(url);
+          const url = await compressAndUpload(file)
+          urls.push(url)
         } catch (error) {
-          console.error("Failed to upload file:", error);
+          console.error("Failed to upload file:", error)
         }
       }
-      onChange(urls);
+      onChange(urls)
     } else {
       try {
-        const url = await compressAndUpload(limitedFiles[0]);
-        onChange(url);
+        const url = await compressAndUpload(limitedFiles[0])
+        onChange(url)
       } catch (error) {
-        console.error("Failed to upload file:", error);
+        console.error("Failed to upload file:", error)
       }
     }
-  };
+  }
 
   const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault()
+    e.stopPropagation()
     if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
+      setDragActive(true)
     } else if (e.type === "dragleave") {
-      setDragActive(false);
+      setDragActive(false)
     }
-  };
+  }
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (disabled || isCompressing) return;
-    handleFiles(e.dataTransfer.files);
-  };
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (disabled || isCompressing) return
+    handleFiles(e.dataTransfer.files)
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFiles(e.target.files);
-  };
-
-  const handleClear = () => {
-    onChange(null);
-  };
-
-  const currentValue = Array.isArray(value) ? value : value ? [value] : [];
+    handleFiles(e.target.files)
+  }
 
   return (
-    <div className="space-y-4">
-      <div
-        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-          dragActive
-            ? "border-primary bg-primary/5"
-            : "border-muted-foreground/25 hover:border-muted-foreground/50"
-        } ${disabled || isCompressing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        onClick={() => !disabled && !isCompressing && document.getElementById(`file-input-${label}`)?.click()}
-      >
-        <input
-          id={`file-input-${label}`}
-          type="file"
-          className="hidden"
-          accept={accept}
-          multiple={multiple}
-          onChange={handleChange}
-          disabled={disabled || isCompressing}
-        />
-        <div className="flex flex-col items-center gap-2">
-          {isCompressing ? (
-            <>
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Compressing and uploading...</p>
-            </>
-          ) : (
-            <>
-              <Upload className="h-8 w-8 text-muted-foreground" />
-              <p className="text-sm font-medium">{label}</p>
-              <p className="text-xs text-muted-foreground">
-                Drag and drop or click to browse
-              </p>
-            </>
-          )}
-        </div>
+    <div
+      className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+        dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-muted-foreground/50"
+      } ${disabled || isCompressing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+      onDragEnter={handleDrag}
+      onDragLeave={handleDrag}
+      onDragOver={handleDrag}
+      onDrop={handleDrop}
+      onClick={() => !disabled && !isCompressing && document.getElementById(`file-input-${label}`)?.click()}
+    >
+      <input
+        id={`file-input-${label}`}
+        type="file"
+        className="hidden"
+        accept={accept}
+        multiple={multiple}
+        onChange={handleChange}
+        disabled={disabled || isCompressing}
+      />
+      <div className="flex flex-col items-center gap-2">
+        {isCompressing ? (
+          <>
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">Compressing and uploading...</p>
+          </>
+        ) : (
+          <>
+            <Upload className="h-8 w-8 text-muted-foreground" />
+            <p className="text-sm font-medium">{label}</p>
+            <p className="text-xs text-muted-foreground">Drag and drop or click to browse</p>
+          </>
+        )}
       </div>
-      {currentValue.length > 0 && (
-        <div className="space-y-2">
-          {currentValue.map((val, index) => (
-            <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm truncate">
-                  {val.split("/").pop() || "Uploaded image"}
-                </span>
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleClear}
-                disabled={disabled || isCompressing}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
-  );
-};
+  )
+}
 
 export default function ArticleEditPage() {
-  const [match, params] = useRoute("/articles/:id");
-  const [_, navigate] = useLocation();
-  const { toast } = useToast();
-  const isNewArticle = !match || params?.id === "new";
-  const articleId = isNewArticle ? null : parseInt(params?.id || "");
+  const [match, params] = useRoute("/articles/:id")
+  const [_, navigate] = useLocation()
+  const { toast } = useToast()
+  const isNewArticle = !match || params?.id === "new"
+  const articleId = isNewArticle ? null : Number.parseInt(params?.id || "")
+
   const [isCompressing, setIsCompressing] = useState({
     tileImage: false,
     inlineImages: false,
-  });
-  const [tileImagePreview, setTileImagePreview] = useState<string | null>(null);
-  const [inlineImagesPreview, setInlineImagesPreview] = useState<string[]>([]);
+  })
+
+  const [tileImagePreview, setTileImagePreview] = useState<string | null>(null)
+  const [inlineImagesPreview, setInlineImagesPreview] = useState<string[]>([])
 
   // Fetch article data if editing
   const { data: articleData, isLoading: isLoadingArticle } = useQuery({
     queryKey: ["/api/articles", articleId],
     queryFn: async () => {
-      return apiRequest("GET", `/api/articles/${articleId}`);
+      return apiRequest("GET", `/api/articles/${articleId}`)
     },
     enabled: !!articleId,
-  });
+  })
 
   // Form setup with react-hook-form
   const form = useForm<z.infer<typeof articleFormSchema>>({
     resolver: zodResolver(articleFormSchema),
     defaultValues,
-  });
+  })
 
   // Populate form and preview when article data is loaded
   useEffect(() => {
@@ -340,38 +322,37 @@ export default function ArticleEditPage() {
         author: articleData.author || "",
         category: articleData.category || "",
         excerpt: articleData.excerpt || "",
-        datePublished: articleData.datePublished
-          ? new Date(articleData.datePublished).toLocaleDateString("en-CA")
-          : "",
+        datePublished: articleData.datePublished ? new Date(articleData.datePublished).toLocaleDateString("en-CA") : "",
         readingTime:
           typeof articleData.readingTime === "string"
-            ? parseInt(articleData.readingTime) || 5
+            ? Number.parseInt(articleData.readingTime) || 5
             : articleData.readingTime || 5,
         externalId: articleData.externalId || "",
         tileImage: articleData.tileImage || "",
         inlineImages: Array.isArray(articleData.inlineImages)
           ? articleData.inlineImages
           : articleData.inlineImages
-          ? [articleData.inlineImages]
-          : [],
+            ? [articleData.inlineImages]
+            : [],
         bodyStart: articleData.bodyStart || "",
         bodyEnd: articleData.bodyEnd || "",
         isDisabled: !!articleData.isDisabled,
         isFeatured: !!articleData.isFeatured,
         superFeature: !!articleData.superFeature,
-      };
-      console.log("Populating form with data:", formData);
-      form.reset(formData);
-      setTileImagePreview(articleData.tileImage || null);
+      }
+
+      console.log("Populating form with data:", formData)
+      form.reset(formData)
+      setTileImagePreview(articleData.tileImage || null)
       setInlineImagesPreview(
         Array.isArray(articleData.inlineImages)
           ? articleData.inlineImages
           : articleData.inlineImages
-          ? [articleData.inlineImages]
-          : []
-      );
+            ? [articleData.inlineImages]
+            : [],
+      )
     }
-  }, [articleData, form, isNewArticle]);
+  }, [articleData, form, isNewArticle])
 
   // Generate slug from title
   const generateSlug = (title: string) => {
@@ -380,60 +361,59 @@ export default function ArticleEditPage() {
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-")
-      .trim();
-  };
+      .trim()
+  }
 
   // Update slug when title changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "title" && value.title && isNewArticle) {
-        const slug = generateSlug(value.title as string);
-        form.setValue("slug", slug);
+        const slug = generateSlug(value.title as string)
+        form.setValue("slug", slug)
       }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [form, isNewArticle]);
+    })
+    return () => subscription.unsubscribe()
+  }, [form, isNewArticle])
 
   // Handle file changes
   const handleTileImageChange = async (value: string | string[] | null) => {
     if (!value) {
-      form.setValue("tileImage", "");
-      setTileImagePreview(null);
-      return;
+      form.setValue("tileImage", "")
+      setTileImagePreview(null)
+      return
     }
-    setIsCompressing((prev) => ({ ...prev, tileImage: true }));
-    const url = Array.isArray(value) ? value[0] : value;
-    form.setValue("tileImage", url);
-    setTileImagePreview(url);
-    setIsCompressing((prev) => ({ ...prev, tileImage: false }));
-  };
+    setIsCompressing((prev) => ({ ...prev, tileImage: true }))
+    const url = Array.isArray(value) ? value[0] : value
+    form.setValue("tileImage", url)
+    setTileImagePreview(url)
+    setIsCompressing((prev) => ({ ...prev, tileImage: false }))
+  }
 
   const handleInlineImagesChange = async (value: string | string[] | null) => {
     if (!value) {
-      form.setValue("inlineImages", []);
-      setInlineImagesPreview([]);
-      return;
+      form.setValue("inlineImages", [])
+      setInlineImagesPreview([])
+      return
     }
-    setIsCompressing((prev) => ({ ...prev, inlineImages: true }));
-    const urls = Array.isArray(value) ? value : [value];
-    form.setValue("inlineImages", urls);
-    setInlineImagesPreview(urls);
-    setIsCompressing((prev) => ({ ...prev, inlineImages: false }));
-  };
+    setIsCompressing((prev) => ({ ...prev, inlineImages: true }))
+    const urls = Array.isArray(value) ? value : [value]
+    form.setValue("inlineImages", urls)
+    setInlineImagesPreview(urls)
+    setIsCompressing((prev) => ({ ...prev, inlineImages: false }))
+  }
 
   // Handle image removal
   const handleRemoveTileImage = () => {
-    form.setValue("tileImage", "");
-    setTileImagePreview(null);
-  };
+    form.setValue("tileImage", "")
+    setTileImagePreview(null)
+  }
 
   const handleRemoveInlineImage = (index: number) => {
-    const updatedImages = form.getValues("inlineImages")?.filter((_, i) => i !== index) || [];
-    const updatedPreviews = inlineImagesPreview.filter((_, i) => i !== index);
-    form.setValue("inlineImages", updatedImages);
-    setInlineImagesPreview(updatedPreviews);
-  };
+    const updatedImages = form.getValues("inlineImages")?.filter((_, i) => i !== index) || []
+    const updatedPreviews = inlineImagesPreview.filter((_, i) => i !== index)
+    form.setValue("inlineImages", updatedImages)
+    setInlineImagesPreview(updatedPreviews)
+  }
 
   // Save article mutation
   const saveMutation = useMutation({
@@ -442,16 +422,16 @@ export default function ArticleEditPage() {
         ...data,
         tileImage: data.tileImage || "",
         inlineImages: data.inlineImages || [],
-      };
+      }
 
-      console.log("Submitting clean data:", cleanData);
-      console.log("Tile Image URL:", cleanData.tileImage);
-      console.log("Inline Images URLs:", cleanData.inlineImages);
+      console.log("Submitting clean data:", cleanData)
+      console.log("Tile Image URL:", cleanData.tileImage)
+      console.log("Inline Images URLs:", cleanData.inlineImages)
 
       if (isNewArticle) {
-        return apiRequest("POST", "/api/articles", cleanData);
+        return apiRequest("POST", "/api/articles", cleanData)
       } else {
-        return apiRequest("PUT", `/api/articles/${articleId}`, cleanData);
+        return apiRequest("PUT", `/api/articles/${articleId}`, cleanData)
       }
     },
     onSuccess: () => {
@@ -460,55 +440,49 @@ export default function ArticleEditPage() {
         description: isNewArticle
           ? "The article has been successfully created."
           : "The article has been successfully updated.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
-      navigate("/articles");
+      })
+      queryClient.invalidateQueries({ queryKey: ["/api/articles"] })
+      navigate("/articles")
     },
     onError: (error) => {
-      console.error("Failed to save article:", error);
+      console.error("Failed to save article:", error)
       toast({
         title: "Error",
         description: `Failed to ${isNewArticle ? "create" : "update"} article: ${error.message || "Please try again"}`,
         variant: "destructive",
-      });
+      })
     },
-  });
+  })
 
   const onSubmit = (data: z.infer<typeof articleFormSchema>) => {
-    console.log("Form data before submission:", data);
+    console.log("Form data before submission:", data)
     if (data.tileImage && data.tileImage.startsWith("data:")) {
       toast({
         title: "Error",
         description: "Please wait for tile image upload to complete",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
     if (data.inlineImages?.some((url) => url.startsWith("data:"))) {
       toast({
         title: "Error",
         description: "Please wait for all inline images to upload",
         variant: "destructive",
-      });
-      return;
+      })
+      return
     }
-    saveMutation.mutate(data as ArticleFormValues);
-  };
+    saveMutation.mutate(data as ArticleFormValues)
+  }
 
   return (
     <DashLayout
       title={isNewArticle ? "Add New Article" : "Edit Article"}
       description={
-        isNewArticle
-          ? "Create a new blog article"
-          : `Editing article: ${form.watch("title") || "Loading..."}`
+        isNewArticle ? "Create a new blog article" : `Editing article: ${form.watch("title") || "Loading..."}`
       }
     >
-      <Button
-        variant="outline"
-        className="mb-6"
-        onClick={() => navigate("/articles")}
-      >
+      <Button variant="outline" className="mb-6 bg-transparent" onClick={() => navigate("/articles")}>
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back to Articles
       </Button>
@@ -534,16 +508,12 @@ export default function ArticleEditPage() {
                     <FormItem>
                       <FormLabel>Article Title</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder="Palm Jebel Ali vs. Palm Jumeirah: A Battle for Supremacy"
-                          {...field}
-                        />
+                        <Input placeholder="Palm Jebel Ali vs. Palm Jumeirah: A Battle for Supremacy" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
@@ -559,7 +529,6 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="externalId"
@@ -567,18 +536,13 @@ export default function ArticleEditPage() {
                       <FormItem>
                         <FormLabel>External ID</FormLabel>
                         <FormControl>
-                          <Input
-                            placeholder="Optional external reference ID"
-                            {...field}
-                            value={field.value || ""}
-                          />
+                          <Input placeholder="Optional external reference ID" {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <FormField
                     control={form.control}
@@ -593,7 +557,6 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="category"
@@ -618,7 +581,6 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="readingTime"
@@ -630,7 +592,7 @@ export default function ArticleEditPage() {
                             type="number"
                             placeholder="5"
                             {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value) || undefined)}
+                            onChange={(e) => field.onChange(Number.parseInt(e.target.value) || undefined)}
                             value={field.value || ""}
                           />
                         </FormControl>
@@ -639,7 +601,6 @@ export default function ArticleEditPage() {
                     )}
                   />
                 </div>
-
                 <FormField
                   control={form.control}
                   name="datePublished"
@@ -653,7 +614,6 @@ export default function ArticleEditPage() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="excerpt"
@@ -701,7 +661,6 @@ export default function ArticleEditPage() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="bodyEnd"
@@ -729,29 +688,26 @@ export default function ArticleEditPage() {
                 <CardTitle>Images</CardTitle>
                 <CardDescription>Upload images for this article</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {tileImagePreview && (
-                  <div className="relative mb-4">
-                    <img
-                      src={tileImagePreview}
-                      alt="Tile Image Preview"
-                      className="w-full max-w-xs h-auto object-cover rounded-md border"
-                    />
-                    <button
-                      type="button"
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 hover:opacity-100 transition-opacity"
-                      onClick={handleRemoveTileImage}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                )}
+              <CardContent className="space-y-6">
                 <FormField
                   control={form.control}
                   name="tileImage"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Tile Image</FormLabel>
+
+                      {/* Tile Image Preview */}
+                      {tileImagePreview && (
+                        <div className="mb-4">
+                          <ImagePreview
+                            src={tileImagePreview || "/placeholder.svg"}
+                            alt="Tile Image Preview"
+                            onRemove={handleRemoveTileImage}
+                            className="w-full max-w-md h-48"
+                          />
+                        </div>
+                      )}
+
                       <FormControl>
                         <FileInput
                           label="Upload Tile Image"
@@ -770,34 +726,30 @@ export default function ArticleEditPage() {
                   )}
                 />
 
-                {inlineImagesPreview.length > 0 && (
-                  <div className="mb-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {inlineImagesPreview.map((url, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={url}
-                            alt={`Inline Image ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-md border"
-                          />
-                          <button
-                            type="button"
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleRemoveInlineImage(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 <FormField
                   control={form.control}
                   name="inlineImages"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Inline Images</FormLabel>
+
+                      {/* Inline Images Preview */}
+                      {inlineImagesPreview.length > 0 && (
+                        <div className="mb-4">
+                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {inlineImagesPreview.map((url, index) => (
+                              <ImagePreview
+                                key={index}
+                                src={url || "/placeholder.svg"}
+                                alt={`Inline Image ${index + 1}`}
+                                onRemove={() => handleRemoveInlineImage(index)}
+                                className="aspect-square"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       <FormControl>
                         <FileInput
                           label="Upload Inline Images"
@@ -842,7 +794,6 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="superFeature"
@@ -858,7 +809,6 @@ export default function ArticleEditPage() {
                       </FormItem>
                     )}
                   />
-
                   <FormField
                     control={form.control}
                     name="isDisabled"
@@ -893,11 +843,7 @@ export default function ArticleEditPage() {
                 disabled={saveMutation.isPending || Object.values(isCompressing).some((v) => v)}
                 className="flex items-center gap-2"
               >
-                {saveMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
+                {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
                 Save Article
               </Button>
             </div>
@@ -905,5 +851,5 @@ export default function ArticleEditPage() {
         </Form>
       )}
     </DashLayout>
-  );
+  )
 }
