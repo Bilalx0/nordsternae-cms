@@ -79,13 +79,13 @@ const headshotCompressionOptions = {
 };
 
 // Custom File Input Component
-const CustomFileInput = ({ 
-  label, 
-  value, 
-  onChange, 
-  accept, 
-  disabled, 
-  isCompressing 
+const CustomFileInput = ({
+  label,
+  value,
+  onChange,
+  accept,
+  disabled,
+  isCompressing,
 }: {
   label: string;
   value?: string;
@@ -140,7 +140,7 @@ const CustomFileInput = ({
       </div>
       {value && (
         <div className="text-sm text-muted-foreground">
-          Current: {value.split('/').pop()}
+          Current: {value.split("/").pop()}
         </div>
       )}
     </div>
@@ -155,6 +155,8 @@ export default function AgentEditPage() {
     headShot: false,
     photo: false,
   });
+  const [headShotPreview, setHeadShotPreview] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const isNewAgent = !match || params?.id === "new";
   const agentId = isNewAgent ? null : parseInt(params?.id || "");
@@ -174,7 +176,7 @@ export default function AgentEditPage() {
     defaultValues,
   });
 
-  // Populate form when agent data is loaded
+  // Populate form and previews when agent data is loaded
   useEffect(() => {
     if (agentData && !isNewAgent) {
       const formData: AgentFormValues = {
@@ -194,9 +196,25 @@ export default function AgentEditPage() {
         headShot: agentData.headShot || "",
         photo: agentData.photo || "",
       };
+      console.log("Populating form with data:", formData);
       form.reset(formData);
+      setHeadShotPreview(formData.headShot || null);
+      setPhotoPreview(formData.photo || null);
     }
   }, [agentData, form, isNewAgent]);
+
+  // Update previews when form image fields change
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "headShot") {
+        setHeadShotPreview(value.headShot || null);
+      }
+      if (name === "photo") {
+        setPhotoPreview(value.photo || null);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   // Compress and upload to Supabase Storage
   const compressAndUploadToStorage = async (
@@ -220,13 +238,13 @@ export default function AgentEditPage() {
       // Generate unique filename
       const fileExt = file.name.split(".").pop();
       const fileName = `${fieldType}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      
+
       // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from("agents-image")
         .upload(fileName, compressedFile, {
           contentType: compressedFile.type,
-          upsert: false, // Don't overwrite existing files
+          upsert: false,
         });
 
       if (error) {
@@ -255,7 +273,7 @@ export default function AgentEditPage() {
         description: `Failed to upload ${fieldType}: ${error instanceof Error ? error.message : "Unknown error"}`,
         variant: "destructive",
       });
-      throw error; // Re-throw to handle in caller
+      throw error;
     } finally {
       setIsCompressing((prev) => ({ ...prev, [fieldType]: false }));
     }
@@ -265,16 +283,17 @@ export default function AgentEditPage() {
   const handleHeadshotChange = async (file: File | null) => {
     if (!file) {
       form.setValue("headShot", "");
+      setHeadShotPreview(null);
       return;
     }
 
     try {
       const url = await compressAndUploadToStorage(file, headshotCompressionOptions, "headShot");
       form.setValue("headShot", url);
-      console.log(`Headshot URL set: ${url}`);
+      setHeadShotPreview(url);
+      console.log(`Headshot URL set and preview updated: ${url}`);
     } catch (error) {
       console.error("Headshot upload error:", error);
-      // Don't set the value if upload failed
     }
   };
 
@@ -282,23 +301,23 @@ export default function AgentEditPage() {
   const handlePhotoChange = async (file: File | null) => {
     if (!file) {
       form.setValue("photo", "");
+      setPhotoPreview(null);
       return;
     }
 
     try {
       const url = await compressAndUploadToStorage(file, compressionOptions, "photo");
       form.setValue("photo", url);
-      console.log(`Photo URL set: ${url}`);
+      setPhotoPreview(url);
+      console.log(`Photo URL set and preview updated: ${url}`);
     } catch (error) {
       console.error("Photo upload error:", error);
-      // Don't set the value if upload failed
     }
   };
 
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
-      // Ensure we're only sending URLs, not base64 data
       const cleanData = {
         ...data,
         headShot: data.headShot || "",
@@ -337,9 +356,7 @@ export default function AgentEditPage() {
 
   const onSubmit = (data: z.infer<typeof agentFormSchema>) => {
     console.log("Form data before submission:", data);
-    
-    // Double check that we don't have base64 data
-    if (data.headShot && data.headShot.startsWith('data:')) {
+    if (data.headShot && data.headShot.startsWith("data:")) {
       toast({
         title: "Error",
         description: "Please wait for headshot upload to complete",
@@ -347,8 +364,7 @@ export default function AgentEditPage() {
       });
       return;
     }
-    
-    if (data.photo && data.photo.startsWith('data:')) {
+    if (data.photo && data.photo.startsWith("data:")) {
       toast({
         title: "Error",
         description: "Please wait for photo upload to complete",
@@ -394,7 +410,7 @@ export default function AgentEditPage() {
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
                     <div className="relative">
                       <Avatar className="h-32 w-32">
-                        <AvatarImage src={form.watch("headShot")} alt={form.watch("name")} />
+                        <AvatarImage src={headShotPreview || ""} alt={form.watch("name")} />
                         <AvatarFallback className="text-2xl">
                           {form.watch("name")?.charAt(0) || "A"}
                         </AvatarFallback>
@@ -633,6 +649,19 @@ export default function AgentEditPage() {
                 <CardDescription>Upload additional images and media for the agent</CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="mb-4">
+                  {photoPreview ? (
+                    <img
+                      src={photoPreview}
+                      alt="Full-size profile photo"
+                      className="w-full max-w-md h-auto object-cover rounded-md"
+                    />
+                  ) : (
+                    <div className="w-full max-w-md h-48 flex items-center justify-center bg-gray-100 rounded-md text-gray-400">
+                      No photo preview available
+                    </div>
+                  )}
+                </div>
                 <FormField
                   control={form.control}
                   name="photo"

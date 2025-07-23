@@ -5,9 +5,8 @@ import { DashLayout } from "@/components/layout/dash-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { FileInput } from "@/components/ui/file-input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BannerHighlightFormValues } from "@/types";
 import {
@@ -29,7 +28,10 @@ import {
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { supabase } from "@/lib/supabase";
+import imageCompression from "browser-image-compression";
 
+// Zod schema for form validation
 const bannerFormSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters"),
   headline: z.string().min(3, "Headline must be at least 3 characters"),
@@ -50,11 +52,89 @@ const defaultValues: BannerHighlightFormValues = {
   isActive: true,
 };
 
+// Image compression options
+const compressionOptions = {
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1920,
+  useWebWorker: true,
+  initialQuality: 0.8,
+};
+
+// Custom File Input Component
+const CustomFileInput = ({
+  label,
+  value,
+  onChange,
+  accept,
+  disabled,
+  isCompressing,
+}: {
+  label: string;
+  value?: string;
+  onChange: (file: File | null) => void;
+  accept?: string;
+  disabled?: boolean;
+  isCompressing?: boolean;
+}) => {
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+    onChange(file);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-2 px-4 py-2 border border-input rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50">
+          <input
+            type="file"
+            className="hidden"
+            accept={accept}
+            onChange={handleFileChange}
+            disabled={disabled || isCompressing}
+          />
+          {isCompressing ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {label}
+            </>
+          ) : (
+            <>
+              <Upload className="h-4 w-4" />
+              {label}
+            </>
+          )}
+        </label>
+        {value && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClear}
+            disabled={disabled || isCompressing}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+      {value && (
+        <div className="text-sm text-muted-foreground">
+          Current: {value.split("/").pop()}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function BannerHighlightEditPage() {
   const [match, params] = useRoute("/banner-highlights/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [isCompressing, setIsCompressing] = useState<boolean>(false);
   const isNewBanner = !match || params?.id === "new";
   const bannerId = isNewBanner ? null : parseInt(params?.id || "");
 
@@ -73,7 +153,7 @@ export default function BannerHighlightEditPage() {
     defaultValues,
   });
 
-  // Populate form when banner data is loaded
+  // Populate form and preview when banner data is loaded
   useEffect(() => {
     if (bannerData && !isNewBanner) {
       const formData: BannerHighlightFormValues = {
@@ -85,30 +165,116 @@ export default function BannerHighlightEditPage() {
         image: bannerData.image || "",
         isActive: !!bannerData.isActive,
       };
-
+      console.log("Populating form with data:", formData);
       form.reset(formData);
       setPreviewImage(formData.image || null);
     }
   }, [bannerData, form, isNewBanner]);
 
-  // Update preview when image changes
+  // Update preview when image field changes
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "image") {
+        console.log("Image field changed, updating preview:", value.image);
         setPreviewImage(value.image || null);
       }
     });
-
     return () => subscription.unsubscribe();
   }, [form]);
+
+  // Compress and upload to Supabase Storage
+  const compressAndUploadToStorage = async (file: File): Promise<string> => {
+    try {
+      setIsCompressing(true);
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      // Compress the image
+      const compressedFile = await imageCompression(file, compressionOptions);
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      // Generate unique filename
+      const fileExt = file.name.split(".").pop();
+      const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from("banner-images")
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from("banner-images")
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded image URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: "Banner image uploaded successfully",
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process image:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsCompressing(false);
+    }
+  };
+
+  // Handle image file selection
+  const handleImageChange = async (file: File | null) => {
+    if (!file) {
+      form.setValue("image", "");
+      setPreviewImage(null);
+      console.log("Image cleared, preview reset");
+      return;
+    }
+
+    try {
+      const url = await compressAndUploadToStorage(file);
+      form.setValue("image", url);
+      setPreviewImage(url);
+      console.log(`Image URL set and preview updated: ${url}`);
+    } catch (error) {
+      console.error("Image upload error:", error);
+    }
+  };
 
   // Save banner mutation
   const saveMutation = useMutation({
     mutationFn: async (data: BannerHighlightFormValues) => {
+      const cleanData = {
+        ...data,
+        image: data.image || "",
+      };
+
+      console.log("Submitting clean data:", cleanData);
+      console.log("Image URL:", cleanData.image);
+
       if (isNewBanner) {
-        return apiRequest("POST", "/api/banner-highlights", data);
+        return apiRequest("POST", "/api/banner-highlights", cleanData);
       } else {
-        return apiRequest("PUT", `/api/banner-highlights/${bannerId}`, data);
+        return apiRequest("PUT", `/api/banner-highlights/${bannerId}`, cleanData);
       }
     },
     onSuccess: () => {
@@ -125,13 +291,23 @@ export default function BannerHighlightEditPage() {
       console.error("Failed to save banner:", error);
       toast({
         title: "Error",
-        description: `Failed to ${isNewBanner ? "create" : "update"} banner. Please try again.`,
+        description: `Failed to ${isNewBanner ? "create" : "update"} banner: ${error.message || "Please try again"}`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: z.infer<typeof bannerFormSchema>) => {
+    console.log("Form data before submission:", data);
+    if (data.image && data.image.startsWith("data:")) {
+      toast({
+        title: "Error",
+        description: "Please wait for image upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+
     saveMutation.mutate(data as BannerHighlightFormValues);
   };
 
@@ -229,140 +405,151 @@ export default function BannerHighlightEditPage() {
                               <Input placeholder="Read More" {...field} value={field.value || ""} />
                             </FormControl>
                             <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="ctaLink"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>CTA Button Link</FormLabel>
+                            <FormControl>
+                              <Input
+                                placeholder="https://nordstern.ae/article/..."
+                                {...field}
+                                value={field.value || ""}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
                     <FormField
                       control={form.control}
-                      name="ctaLink"
+                      name="image"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>CTA Button Link</FormLabel>
+                          <FormLabel>Banner Image</FormLabel>
                           <FormControl>
-                            <Input
-                              placeholder="https://nordstern.ae/article/..."
-                              {...field}
-                              value={field.value || ""}
+                            <CustomFileInput
+                              label={isCompressing ? "Compressing..." : "Upload Banner Image"}
+                              value={field.value}
+                              onChange={handleImageChange}
+                              accept="image/*"
+                              disabled={isCompressing}
+                              isCompressing={isCompressing}
                             />
                           </FormControl>
+                          <FormDescription>
+                            Images will be compressed and uploaded to Supabase storage
+                          </FormDescription>
                           <FormMessage />
+                          {isCompressing && (
+                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Compressing and uploading image...
+                            </div>
+                          )}
                         </FormItem>
                       )}
                     />
-                  </div>
+                  </CardContent>
+                </Card>
 
-                  <FormField
-                    control={form.control}
-                    name="image"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Banner Image</FormLabel>
-                        <FormControl>
-                          <FileInput
-                            label="Upload Banner Image"
-                            value={field.value}
-                            onChange={field.onChange}
-                            accept="image/*"
-                          />
-                        </FormControl>
-                        <FormDescription>The image for the banner</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Visibility Settings</CardTitle>
+                    <CardDescription>Control when and how this banner appears</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="isActive"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">Active</FormLabel>
+                            <FormDescription>Display this banner on the website</FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch checked={field.value} onCheckedChange={field.onChange} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Visibility Settings</CardTitle>
-                  <CardDescription>Control when and how this banner appears</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="isActive"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                        <div className="space-y-0.5">
-                          <FormLabel className="text-base">Active</FormLabel>
-                          <FormDescription>Display this banner on the website</FormDescription>
+              <div className="md:col-span-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Banner Preview</CardTitle>
+                    <CardDescription>How the banner will look on the website</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9]">
+                      {previewImage ? (
+                        <img
+                          src={previewImage}
+                          alt="Banner Preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-gray-400">
+                          No image preview available
                         </div>
-                        <FormControl>
-                          <Switch checked={field.value} onCheckedChange={field.onChange} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="md:col-span-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Banner Preview</CardTitle>
-                  <CardDescription>How the banner will look on the website</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9]">
-                    {previewImage ? (
-                      <img
-                        src={previewImage}
-                        alt="Banner Preview"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-400">
-                        No image preview available
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="space-y-2 p-4 border rounded-md bg-white">
-                    <h3 className="text-lg font-bold">
-                      {form.watch("headline") || "Headline"}
-                    </h3>
-                    <p className="text-sm text-gray-600">
-                      {form.watch("subheading") || "Subheading text will appear here"}
-                    </p>
-                    <div className="mt-4">
-                      <span className="inline-block px-4 py-2 bg-primary text-white text-sm font-medium rounded">
-                        {form.watch("cta") || "Read More"}
-                      </span>
+                      )}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
 
-          <div className="flex justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate("/banner-highlights")}
-              className="mr-2"
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={saveMutation.isPending}
-              className="flex items-center gap-2"
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              Save Banner
-            </Button>
-          </div>
-        </form>
-      </Form>
-    )}
-  </DashLayout>
-);
+                    <div className="space-y-2 p-4 border rounded-md bg-white">
+                      <h3 className="text-lg font-bold">
+                        {form.watch("headline") || "Headline"}
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        {form.watch("subheading") || "Subheading text will appear here"}
+                      </p>
+                      <div className="mt-4">
+                        <span className="inline-block px-4 py-2 bg-primary text-white text-sm font-medium rounded">
+                          {form.watch("cta") || "Read More"}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => navigate("/banner-highlights")}
+                className="mr-2"
+                disabled={isCompressing}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saveMutation.isPending || isCompressing}
+                className="flex items-center gap-2"
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Save Banner
+              </Button>
+            </div>
+          </form>
+        </Form>
+      )}
+    </DashLayout>
+  );
 }
