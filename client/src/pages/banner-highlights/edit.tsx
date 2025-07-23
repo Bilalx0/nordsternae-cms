@@ -60,7 +60,7 @@ const compressionOptions = {
   initialQuality: 0.8,
 };
 
-// FileInput Component (from AgentEditPage)
+// FileInput Component with fixed Supabase upload
 const FileInput = ({
   label,
   value,
@@ -81,6 +81,63 @@ const FileInput = ({
   isCompressing?: boolean;
 }) => {
   const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
+
+  const compressAndUpload = async (file: File): Promise<string> => {
+    try {
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      // Compress the image
+      const compressedFile = await imageCompression(file, compressionOptions);
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      // Generate unique filename
+      const fileExt = file.name.split(".").pop();
+      const bucket = label.includes("Profile Picture") ? "agents-image" : "banner-images";
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded image URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: "Image uploaded successfully",
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process image:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -106,33 +163,6 @@ const FileInput = ({
       } catch (error) {
         console.error("Failed to upload file:", error);
       }
-    }
-  };
-
-  const compressAndUpload = async (file: File): Promise<string> => {
-    try {
-      const compressedFile = await imageCompression(file, compressionOptions);
-      const fileExt = file.name.split(".").pop();
-      const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-
-      const { data, error } = await supabase.storage
-        .from("banner-images")
-        .upload(fileName, compressedFile, {
-          contentType: compressedFile.type,
-          upsert: false,
-        });
-
-      if (error) {
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from("banner-images")
-        .getPublicUrl(fileName);
-
-      return publicUrlData.publicUrl;
-    } catch (error) {
-      throw error;
     }
   };
 
@@ -273,9 +303,10 @@ export default function BannerHighlightEditPage() {
       form.setValue("image", "");
       return;
     }
-
+    setIsCompressing(true);
     const url = Array.isArray(value) ? value[0] : value;
     form.setValue("image", url);
+    setIsCompressing(false);
   };
 
   // Save banner mutation

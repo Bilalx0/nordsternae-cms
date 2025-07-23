@@ -78,7 +78,7 @@ const headshotCompressionOptions = {
   initialQuality: 0.8,
 };
 
-// FileInput Component matching your desired design
+// FileInput Component with fixed Supabase upload
 const FileInput = ({
   label,
   value,
@@ -99,6 +99,64 @@ const FileInput = ({
   isCompressing?: boolean;
 }) => {
   const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
+
+  const compressAndUpload = async (file: File): Promise<string> => {
+    try {
+      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+
+      // Compress the image
+      const options = label.includes("Profile Picture") ? headshotCompressionOptions : compressionOptions;
+      const compressedFile = await imageCompression(file, options);
+      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
+
+      toast({
+        title: "Image Compressed",
+        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
+      });
+
+      // Generate unique filename
+      const fileExt = file.name.split(".").pop();
+      const bucket = label.includes("Profile Picture") ? "agents-image" : "banner-images";
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded image URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: "Image uploaded successfully",
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process image:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -107,7 +165,6 @@ const FileInput = ({
     const limitedFiles = fileArray.slice(0, maxFiles);
 
     if (multiple) {
-      // Handle multiple files (not used in this component but kept for consistency)
       const urls: string[] = [];
       for (const file of limitedFiles) {
         try {
@@ -119,7 +176,6 @@ const FileInput = ({
       }
       onChange(urls);
     } else {
-      // Handle single file
       try {
         const url = await compressAndUpload(limitedFiles[0]);
         onChange(url);
@@ -127,12 +183,6 @@ const FileInput = ({
         console.error("Failed to upload file:", error);
       }
     }
-  };
-
-  const compressAndUpload = async (file: File): Promise<string> => {
-    // This would be replaced with your actual compression and upload logic
-    // For now, returning a placeholder
-    return URL.createObjectURL(file);
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -280,83 +330,16 @@ export default function AgentEditPage() {
     }
   }, [agentData, form, isNewAgent]);
 
-  // Compress and upload to Supabase Storage
-  const compressAndUploadToStorage = async (
-    file: File,
-    options: typeof compressionOptions,
-    fieldType: "headShot" | "photo"
-  ): Promise<string> => {
-    try {
-      setIsCompressing((prev) => ({ ...prev, [fieldType]: true }));
-      console.log(`Original ${fieldType} size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
-      // Compress the image
-      const compressedFile = await imageCompression(file, options);
-      console.log(`Compressed ${fieldType} size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
-      // Generate unique filename
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${fieldType}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("agents-image")
-        .upload(fileName, compressedFile, {
-          contentType: compressedFile.type,
-          upsert: false,
-        });
-
-      if (error) {
-        console.error("Supabase upload error:", error);
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
-
-      // Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from("agents-image")
-        .getPublicUrl(fileName);
-
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded ${fieldType} URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: `${fieldType} uploaded successfully`,
-      });
-
-      return publicUrl;
-    } catch (error) {
-      console.error(`Failed to process ${fieldType}:`, error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload ${fieldType}: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
-      throw error;
-    } finally {
-      setIsCompressing((prev) => ({ ...prev, [fieldType]: false }));
-    }
-  };
-
   // Handle headshot file selection with proper compression and upload
   const handleHeadshotChange = async (value: string | string[] | null) => {
     if (!value) {
       form.setValue("headShot", "");
       return;
     }
-
-    // If it's a blob URL from file selection, we need to convert it back to a file
-    // This is a simplified approach - in a real implementation, you'd handle this differently
+    setIsCompressing((prev) => ({ ...prev, headShot: true }));
     const url = Array.isArray(value) ? value[0] : value;
-    
-    // For now, just set the URL directly
-    // In a real implementation, you'd want to handle the file upload here
     form.setValue("headShot", url);
+    setIsCompressing((prev) => ({ ...prev, headShot: false }));
   };
 
   // Handle photo file selection with proper compression and upload
@@ -365,9 +348,10 @@ export default function AgentEditPage() {
       form.setValue("photo", "");
       return;
     }
-
+    setIsCompressing((prev) => ({ ...prev, photo: true }));
     const url = Array.isArray(value) ? value[0] : value;
     form.setValue("photo", url);
+    setIsCompressing((prev) => ({ ...prev, photo: false }));
   };
 
   // Save agent mutation
