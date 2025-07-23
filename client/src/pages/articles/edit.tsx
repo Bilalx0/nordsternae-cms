@@ -732,15 +732,15 @@ export default function ArticleEditPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {tileImagePreview && (
-                  <div className="relative mb-4">
+                  <div className="relative group mb-4">
                     <img
                       src={tileImagePreview}
                       alt="Tile Image Preview"
-                      className="w-full max-w-xs h-auto object-cover rounded-md border"
+                      className="w-full h-32 object-cover rounded-md border"
                     />
                     <button
                       type="button"
-                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 hover:opacity-100 transition-opacity"
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={handleRemoveTileImage}
                     >
                       <X className="h-4 w-4" />

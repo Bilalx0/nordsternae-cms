@@ -354,6 +354,15 @@ export default function AgentEditPage() {
     setIsCompressing((prev) => ({ ...prev, photo: false }));
   };
 
+  // Handle image removal
+  const handleRemoveHeadshot = () => {
+    form.setValue("headShot", "");
+  };
+
+  const handleRemovePhoto = () => {
+    form.setValue("photo", "");
+  };
+
   // Save agent mutation
   const saveMutation = useMutation({
     mutationFn: async (data: AgentFormValues) => {
@@ -450,13 +459,22 @@ export default function AgentEditPage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-col sm:flex-row gap-8 items-start">
                   <div className="w-full max-w-xs flex flex-col items-center space-y-4">
-                    <div className="relative">
+                    <div className="relative group">
                       <Avatar className="h-32 w-32">
                         <AvatarImage src={headShotValue || ""} alt={form.watch("name")} />
                         <AvatarFallback className="text-2xl">
                           {form.watch("name")?.charAt(0) || "A"}
                         </AvatarFallback>
                       </Avatar>
+                      {headShotValue && (
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={handleRemoveHeadshot}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                       {isCompressing.headShot && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
                           <Loader2 className="h-6 w-6 animate-spin text-white" />
@@ -692,12 +710,19 @@ export default function AgentEditPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {photoValue && (
-                  <div className="mb-4">
+                  <div className="relative group mb-4">
                     <img
                       src={photoValue}
                       alt="Full-size profile photo"
-                      className="w-full max-w-md h-auto object-cover rounded-md border"
+                      className="w-full max-w-md h-32 object-cover rounded-md border"
                     />
+                    <button
+                      type="button"
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={handleRemovePhoto}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 )}
                 
@@ -755,4 +780,4 @@ export default function AgentEditPage() {
       )}
     </DashLayout>
   );
-}
+};
