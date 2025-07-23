@@ -313,6 +313,8 @@ export default function ArticleEditPage() {
     tileImage: false,
     inlineImages: false,
   });
+  const [tileImagePreview, setTileImagePreview] = useState<string | null>(null);
+  const [inlineImagesPreview, setInlineImagesPreview] = useState<string[]>([]);
 
   // Fetch article data if editing
   const { data: articleData, isLoading: isLoadingArticle } = useQuery({
@@ -329,7 +331,7 @@ export default function ArticleEditPage() {
     defaultValues,
   });
 
-  // Populate form when article data is loaded
+  // Populate form and preview when article data is loaded
   useEffect(() => {
     if (articleData && !isNewArticle) {
       const formData: ArticleFormValues = {
@@ -360,6 +362,14 @@ export default function ArticleEditPage() {
       };
       console.log("Populating form with data:", formData);
       form.reset(formData);
+      setTileImagePreview(articleData.tileImage || null);
+      setInlineImagesPreview(
+        Array.isArray(articleData.inlineImages)
+          ? articleData.inlineImages
+          : articleData.inlineImages
+          ? [articleData.inlineImages]
+          : []
+      );
     }
   }, [articleData, form, isNewArticle]);
 
@@ -389,23 +399,40 @@ export default function ArticleEditPage() {
   const handleTileImageChange = async (value: string | string[] | null) => {
     if (!value) {
       form.setValue("tileImage", "");
+      setTileImagePreview(null);
       return;
     }
     setIsCompressing((prev) => ({ ...prev, tileImage: true }));
     const url = Array.isArray(value) ? value[0] : value;
     form.setValue("tileImage", url);
+    setTileImagePreview(url);
     setIsCompressing((prev) => ({ ...prev, tileImage: false }));
   };
 
   const handleInlineImagesChange = async (value: string | string[] | null) => {
     if (!value) {
       form.setValue("inlineImages", []);
+      setInlineImagesPreview([]);
       return;
     }
     setIsCompressing((prev) => ({ ...prev, inlineImages: true }));
     const urls = Array.isArray(value) ? value : [value];
     form.setValue("inlineImages", urls);
+    setInlineImagesPreview(urls);
     setIsCompressing((prev) => ({ ...prev, inlineImages: false }));
+  };
+
+  // Handle image removal
+  const handleRemoveTileImage = () => {
+    form.setValue("tileImage", "");
+    setTileImagePreview(null);
+  };
+
+  const handleRemoveInlineImage = (index: number) => {
+    const updatedImages = form.getValues("inlineImages")?.filter((_, i) => i !== index) || [];
+    const updatedPreviews = inlineImagesPreview.filter((_, i) => i !== index);
+    form.setValue("inlineImages", updatedImages);
+    setInlineImagesPreview(updatedPreviews);
   };
 
   // Save article mutation
@@ -467,9 +494,6 @@ export default function ArticleEditPage() {
     }
     saveMutation.mutate(data as ArticleFormValues);
   };
-
-  const tileImageValue = form.watch("tileImage");
-  const inlineImagesValue = form.watch("inlineImages") || [];
 
   return (
     <DashLayout
@@ -706,13 +730,20 @@ export default function ArticleEditPage() {
                 <CardDescription>Upload images for this article</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {tileImageValue && (
-                  <div className="mb-4">
+                {tileImagePreview && (
+                  <div className="relative mb-4">
                     <img
-                      src={tileImageValue}
+                      src={tileImagePreview}
                       alt="Tile Image Preview"
                       className="w-full max-w-xs h-auto object-cover rounded-md border"
                     />
+                    <button
+                      type="button"
+                      className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 hover:opacity-100 transition-opacity"
+                      onClick={handleRemoveTileImage}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
                   </div>
                 )}
                 <FormField
@@ -739,16 +770,24 @@ export default function ArticleEditPage() {
                   )}
                 />
 
-                {inlineImagesValue.length > 0 && (
+                {inlineImagesPreview.length > 0 && (
                   <div className="mb-4">
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {inlineImagesValue.map((url, index) => (
-                        <img
-                          key={index}
-                          src={url}
-                          alt={`Inline Image ${index + 1}`}
-                          className="w-full h-32 object-cover rounded-md border"
-                        />
+                      {inlineImagesPreview.map((url, index) => (
+                        <div key={index} className="relative group">
+                          <img
+                            src={url}
+                            alt={`Inline Image ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-md border"
+                          />
+                          <button
+                            type="button"
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleRemoveInlineImage(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
