@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react"; // Import ImageIcon
+import { ArrowLeft, Save, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BannerHighlightFormValues } from "@/types";
 import {
@@ -60,19 +60,23 @@ const compressionOptions = {
   initialQuality: 0.8,
 };
 
-// Re-designed FileInput Component for consistency with agent's page
+// FileInput Component (from AgentEditPage)
 const FileInput = ({
   label,
   value,
   onChange,
   accept,
+  multiple = false,
+  maxFiles = 1,
   disabled = false,
   isCompressing = false,
 }: {
   label: string;
-  value?: string;
-  onChange: (value: string | null) => void;
+  value?: string | string[];
+  onChange: (value: string | string[] | null) => void;
   accept?: string;
+  multiple?: boolean;
+  maxFiles?: number;
   disabled?: boolean;
   isCompressing?: boolean;
 }) => {
@@ -80,14 +84,56 @@ const FileInput = ({
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const file = files[0];
-    
-    // Create a temporary Blob URL for immediate preview
-    const tempUrl = URL.createObjectURL(file);
-    onChange(tempUrl); // Pass the temp URL to the form field for immediate display
 
-    // Now, call the actual upload function
-    // The parent component will handle the compression and real URL update
+    const fileArray = Array.from(files);
+    const limitedFiles = fileArray.slice(0, maxFiles);
+
+    if (multiple) {
+      const urls: string[] = [];
+      for (const file of limitedFiles) {
+        try {
+          const url = await compressAndUpload(file);
+          urls.push(url);
+        } catch (error) {
+          console.error("Failed to upload file:", error);
+        }
+      }
+      onChange(urls);
+    } else {
+      try {
+        const url = await compressAndUpload(limitedFiles[0]);
+        onChange(url);
+      } catch (error) {
+        console.error("Failed to upload file:", error);
+      }
+    }
+  };
+
+  const compressAndUpload = async (file: File): Promise<string> => {
+    try {
+      const compressedFile = await imageCompression(file, compressionOptions);
+      const fileExt = file.name.split(".").pop();
+      const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from("banner-images")
+        .upload(fileName, compressedFile, {
+          contentType: compressedFile.type,
+          upsert: false,
+        });
+
+      if (error) {
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from("banner-images")
+        .getPublicUrl(fileName);
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      throw error;
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -116,7 +162,7 @@ const FileInput = ({
     onChange(null);
   };
 
-  const currentValue = value; // Single value for banner image
+  const currentValue = Array.isArray(value) ? value[0] : value;
 
   return (
     <div className="space-y-4">
@@ -137,10 +183,10 @@ const FileInput = ({
           type="file"
           className="hidden"
           accept={accept}
+          multiple={multiple}
           onChange={handleChange}
           disabled={disabled || isCompressing}
         />
-        
         <div className="flex flex-col items-center gap-2">
           {isCompressing ? (
             <>
@@ -158,14 +204,12 @@ const FileInput = ({
           )}
         </div>
       </div>
-
       {currentValue && (
         <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
           <div className="flex items-center gap-2">
-            <ImageIcon className="h-4 w-4 text-muted-foreground" />
-            {/* Display filename, or 'Uploaded image' if it's a blob URL */}
+            <Upload className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm truncate">
-              {currentValue.startsWith("blob:") ? "New Image" : (currentValue.split("/").pop() || "Uploaded image")}
+              {currentValue.split("/").pop() || "Uploaded image"}
             </span>
           </div>
           <Button
@@ -187,8 +231,7 @@ export default function BannerHighlightEditPage() {
   const [match, params] = useRoute("/banner-highlights/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
-  const [isCompressing, setIsCompressing] = useState<boolean>(false);
-
+  const [isCompressing, setIsCompressing] = useState(false);
   const isNewBanner = !match || params?.id === "new";
   const bannerId = isNewBanner ? null : parseInt(params?.id || "");
 
@@ -207,7 +250,7 @@ export default function BannerHighlightEditPage() {
     defaultValues,
   });
 
-  // Populate form and set preview when banner data is loaded
+  // Populate form when banner data is loaded
   useEffect(() => {
     if (bannerData && !isNewBanner) {
       const formData: BannerHighlightFormValues = {
@@ -224,111 +267,60 @@ export default function BannerHighlightEditPage() {
     }
   }, [bannerData, form, isNewBanner]);
 
-  // Compress and upload to Supabase Storage
-  const compressAndUploadToStorage = async (file: File): Promise<string> => {
-    try {
-      setIsCompressing(true);
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
-      // Compress the image
-      const compressedFile = await imageCompression(file, compressionOptions);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
-      // Generate unique filename
-      const fileExt = file.name.split(".").pop();
-      const fileName = `banner-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from("banner-images")
-        .upload(fileName, compressedFile, {
-          contentType: compressedFile.type,
-          upsert: false,
-        });
-
-      if (error) {
-        console.error("Supabase upload error:", error);
-        throw new Error(`Storage upload failed: ${error.message}`);
-      }
-
-      // Get public URL
-      const { data: publicUrlData } = supabase.storage
-        .from("banner-images")
-        .getPublicUrl(fileName);
-
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: "Banner image uploaded successfully",
-      });
-
-      return publicUrl;
-    } catch (error) {
-      console.error("Failed to process image:", error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
-      throw error;
-    } finally {
-      setIsCompressing(false);
-    }
-  };
-
-  // Handle image file selection
-  const handleImageChange = async (value: string | null) => {
+  // Handle image file selection with compression and upload
+  const handleImageChange = async (value: string | string[] | null) => {
     if (!value) {
-      // User cleared the image
       form.setValue("image", "");
       return;
     }
 
-    // If it's a blob URL (temporary preview from FileInput)
-    if (value.startsWith("blob:")) {
-      // Revoke the old blob URL if it exists
-      const currentImageValue = form.getValues("image");
-      if (currentImageValue && currentImageValue.startsWith("blob:")) {
-        URL.revokeObjectURL(currentImageValue);
-      }
-      
-      form.setValue("image", value); // Set the temporary URL for immediate preview
-      
-      // Convert blob URL back to File object to upload
-      try {
-        const response = await fetch(value);
-        const blob = await response.blob();
-        // You might need to infer the file name/type if not available in blob directly
-        const fileName = `temp-upload-${Date.now()}.jpeg`; // Or extract from response headers if possible
-        const fileType = blob.type || 'image/jpeg';
-        const file = new File([blob], fileName, { type: fileType });
-        
-        const uploadedUrl = await compressAndUploadToStorage(file);
-        form.setValue("image", uploadedUrl); // Update with the actual Supabase URL
-        URL.revokeObjectURL(value); // Revoke the temporary URL
-      } catch (error) {
-        console.error("Error converting blob to file or uploading:", error);
-        form.setValue("image", ""); // Clear on error
-      }
-    } else {
-      // It's a direct URL (from existing data or a re-set)
-      form.setValue("image", value);
-    }
+    const url = Array.isArray(value) ? value[0] : value;
+    form.setValue("image", url);
   };
+
+  // Save banner mutation
+  const saveMutation = useMutation({
+    mutationFn: async (data: BannerHighlightFormValues) => {
+      const cleanData = {
+        ...data,
+        image: data.image || "",
+      };
+
+      console.log("Submitting clean data:", cleanData);
+      console.log("Image URL:", cleanData.image);
+
+      if (isNewBanner) {
+        return apiRequest("POST", "/api/banner-highlights", cleanData);
+      } else {
+        return apiRequest("PUT", `/api/banner-highlights/${bannerId}`, cleanData);
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: isNewBanner ? "Banner created" : "Banner updated",
+        description: isNewBanner
+          ? "The banner highlight has been successfully created."
+          : "The banner highlight has been successfully updated.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/banner-highlights"] });
+      navigate("/banner-highlights");
+    },
+    onError: (error) => {
+      console.error("Failed to save banner:", error);
+      toast({
+        title: "Error",
+        description: `Failed to ${isNewBanner ? "create" : "update"} banner: ${error.message || "Please try again"}`,
+        variant: "destructive",
+      });
+    },
+  });
 
   const onSubmit = (data: z.infer<typeof bannerFormSchema>) => {
     console.log("Form data before submission:", data);
-    if (isCompressing) {
+    if (data.image && data.image.startsWith("data:")) {
       toast({
         title: "Error",
-        description: "Please wait for image upload to complete before saving.",
+        description: "Please wait for image upload to complete",
         variant: "destructive",
       });
       return;
@@ -466,23 +458,14 @@ export default function BannerHighlightEditPage() {
                             <FileInput
                               label="Upload Banner Image"
                               value={field.value}
-                              onChange={(url) => {
-                                // If a file was selected, `handleImageChange` will handle the upload.
-                                // If the value is null (cleared), `handleImageChange` will also handle it.
-                                // If it's a URL (from initial load), no action needed here.
-                                if (url === null || url.startsWith("blob:")) {
-                                  handleImageChange(url);
-                                } else {
-                                  field.onChange(url); // Set the URL directly if it's not a new file
-                                }
-                              }}
+                              onChange={handleImageChange}
                               accept="image/*"
                               disabled={isCompressing}
                               isCompressing={isCompressing}
                             />
                           </FormControl>
                           <FormDescription>
-                            Images will be compressed and uploaded to Supabase storage. For best results, use high-resolution images.
+                            Images will be compressed and uploaded to Supabase storage
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -523,8 +506,8 @@ export default function BannerHighlightEditPage() {
                     <CardDescription>How the banner will look on the website</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9] border">
-                      {imageValue ? ( // Use imageValue from form.watch
+                    <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9]">
+                      {imageValue ? (
                         <img
                           src={imageValue}
                           alt="Banner Preview"
