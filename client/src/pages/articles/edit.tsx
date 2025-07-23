@@ -37,6 +37,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import imageCompression from "browser-image-compression";
 import { supabase } from "@/lib/supabase";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 // Zod schema for form validation
 const articleFormSchema = z.object({
