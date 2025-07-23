@@ -466,15 +466,6 @@ export default function AgentEditPage() {
                           {form.watch("name")?.charAt(0) || "A"}
                         </AvatarFallback>
                       </Avatar>
-                      {headShotValue && (
-                        <button
-                          type="button"
-                          className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={handleRemoveHeadshot}
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
                       {isCompressing.headShot && (
                         <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full">
                           <Loader2 className="h-6 w-6 animate-spin text-white" />
@@ -714,7 +705,7 @@ export default function AgentEditPage() {
                     <img
                       src={photoValue}
                       alt="Full-size profile photo"
-                      className="w-full max-w-md h-32 object-cover rounded-md border"
+                      className="w-full h-32 object-cover rounded-md border"
                     />
                     <button
                       type="button"
