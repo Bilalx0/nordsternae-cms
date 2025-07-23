@@ -140,7 +140,7 @@ const FileInput = ({
 
       // Generate unique filename
       const fileExt = file.name.split(".").pop();
-      const bucket = "articles-image";
+      const bucket = "article-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
       // Upload to Supabase Storage
