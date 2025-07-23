@@ -231,6 +231,10 @@ const FileInput = ({
     handleFiles(e.target.files);
   };
 
+  const handleClear = () => {
+    onChange(null);
+  };
+
   const currentValue = Array.isArray(value) ? value : value ? [value] : [];
 
   return (
@@ -283,6 +287,15 @@ const FileInput = ({
                   {val.split("/").pop() || "Uploaded image"}
                 </span>
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClear}
+                disabled={disabled || isCompressing}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           ))}
         </div>
@@ -719,11 +732,11 @@ export default function ArticleEditPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {tileImagePreview && (
-                  <div className="relative group mb-4">
+                  <div className="relative group w-56">
                     <img
                       src={tileImagePreview}
                       alt="Tile Image Preview"
-                      className="max-w-xs h-32 object-cover rounded-md border"
+                      className="w-full h-32 object-cover rounded-md border"
                     />
                     <button
                       type="button"
@@ -766,7 +779,7 @@ export default function ArticleEditPage() {
                           <img
                             src={url}
                             alt={`Inline Image ${index + 1}`}
-                            className="max-w-xs h-32 object-cover rounded-md border"
+                            className="w-full h-32 object-cover rounded-md border"
                           />
                           <button
                             type="button"
@@ -894,4 +907,4 @@ export default function ArticleEditPage() {
       )}
     </DashLayout>
   );
-};
+}
