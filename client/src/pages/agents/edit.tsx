@@ -701,7 +701,7 @@ export default function AgentEditPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {photoValue && (
-                  <div className="relative group mb-4">
+                  <div className="relative group mb-4 w-56">
                     <img
                       src={photoValue}
                       alt="Full-size profile photo"

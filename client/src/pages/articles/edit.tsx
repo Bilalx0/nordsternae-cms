@@ -766,7 +766,6 @@ export default function ArticleEditPage() {
                       <FormDescription>
                         The main thumbnail image for this article, compressed and uploaded to Supabase
                       </FormDescription>
-                      <FormMessage />
                     </FormItem>
                   )}
                 />
@@ -814,7 +813,6 @@ export default function ArticleEditPage() {
                       <FormDescription>
                         Images for article content, compressed and uploaded to Supabase (up to 10)
                       </FormDescription>
-                      <FormMessage />
                     </FormItem>
                   )}
                 />
