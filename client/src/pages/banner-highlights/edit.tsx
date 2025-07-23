@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, Loader2, Upload, X } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react"; // Import ImageIcon
 import { useToast } from "@/hooks/use-toast";
 import { BannerHighlightFormValues } from "@/types";
 import {
@@ -60,69 +60,123 @@ const compressionOptions = {
   initialQuality: 0.8,
 };
 
-// Custom File Input Component
-const CustomFileInput = ({
+// Re-designed FileInput Component for consistency with agent's page
+const FileInput = ({
   label,
   value,
   onChange,
   accept,
-  disabled,
-  isCompressing,
+  disabled = false,
+  isCompressing = false,
 }: {
   label: string;
   value?: string;
-  onChange: (file: File | null) => void;
+  onChange: (value: string | null) => void;
   accept?: string;
   disabled?: boolean;
   isCompressing?: boolean;
 }) => {
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
-    onChange(file);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    
+    // Create a temporary Blob URL for immediate preview
+    const tempUrl = URL.createObjectURL(file);
+    onChange(tempUrl); // Pass the temp URL to the form field for immediate display
+
+    // Now, call the actual upload function
+    // The parent component will handle the compression and real URL update
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (disabled || isCompressing) return;
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(e.target.files);
   };
 
   const handleClear = () => {
     onChange(null);
   };
 
+  const currentValue = value; // Single value for banner image
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <label className="flex items-center gap-2 px-4 py-2 border border-input rounded-md cursor-pointer hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50">
-          <input
-            type="file"
-            className="hidden"
-            accept={accept}
-            onChange={handleFileChange}
-            disabled={disabled || isCompressing}
-          />
+    <div className="space-y-4">
+      <div
+        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+          dragActive
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-muted-foreground/50"
+        } ${disabled || isCompressing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={() => !disabled && !isCompressing && document.getElementById(`file-input-${label}`)?.click()}
+      >
+        <input
+          id={`file-input-${label}`}
+          type="file"
+          className="hidden"
+          accept={accept}
+          onChange={handleChange}
+          disabled={disabled || isCompressing}
+        />
+        
+        <div className="flex flex-col items-center gap-2">
           {isCompressing ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              {label}
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Compressing and uploading...</p>
             </>
           ) : (
             <>
-              <Upload className="h-4 w-4" />
-              {label}
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm font-medium">{label}</p>
+              <p className="text-xs text-muted-foreground">
+                Drag and drop or click to browse
+              </p>
             </>
           )}
-        </label>
-        {value && (
+        </div>
+      </div>
+
+      {currentValue && (
+        <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+            {/* Display filename, or 'Uploaded image' if it's a blob URL */}
+            <span className="text-sm truncate">
+              {currentValue.startsWith("blob:") ? "New Image" : (currentValue.split("/").pop() || "Uploaded image")}
+            </span>
+          </div>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleClear}
             disabled={disabled || isCompressing}
           >
             <X className="h-4 w-4" />
           </Button>
-        )}
-      </div>
-      {value && (
-        <div className="text-sm text-muted-foreground">
-          Current: {value.split("/").pop()}
         </div>
       )}
     </div>
@@ -133,8 +187,8 @@ export default function BannerHighlightEditPage() {
   const [match, params] = useRoute("/banner-highlights/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isCompressing, setIsCompressing] = useState<boolean>(false);
+
   const isNewBanner = !match || params?.id === "new";
   const bannerId = isNewBanner ? null : parseInt(params?.id || "");
 
@@ -153,7 +207,7 @@ export default function BannerHighlightEditPage() {
     defaultValues,
   });
 
-  // Populate form and preview when banner data is loaded
+  // Populate form and set preview when banner data is loaded
   useEffect(() => {
     if (bannerData && !isNewBanner) {
       const formData: BannerHighlightFormValues = {
@@ -167,20 +221,8 @@ export default function BannerHighlightEditPage() {
       };
       console.log("Populating form with data:", formData);
       form.reset(formData);
-      setPreviewImage(formData.image || null);
     }
   }, [bannerData, form, isNewBanner]);
-
-  // Update preview when image field changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "image") {
-        console.log("Image field changed, updating preview:", value.image);
-        setPreviewImage(value.image || null);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form]);
 
   // Compress and upload to Supabase Storage
   const compressAndUploadToStorage = async (file: File): Promise<string> => {
@@ -242,67 +284,51 @@ export default function BannerHighlightEditPage() {
   };
 
   // Handle image file selection
-  const handleImageChange = async (file: File | null) => {
-    if (!file) {
+  const handleImageChange = async (value: string | null) => {
+    if (!value) {
+      // User cleared the image
       form.setValue("image", "");
-      setPreviewImage(null);
-      console.log("Image cleared, preview reset");
       return;
     }
 
-    try {
-      const url = await compressAndUploadToStorage(file);
-      form.setValue("image", url);
-      setPreviewImage(url);
-      console.log(`Image URL set and preview updated: ${url}`);
-    } catch (error) {
-      console.error("Image upload error:", error);
+    // If it's a blob URL (temporary preview from FileInput)
+    if (value.startsWith("blob:")) {
+      // Revoke the old blob URL if it exists
+      const currentImageValue = form.getValues("image");
+      if (currentImageValue && currentImageValue.startsWith("blob:")) {
+        URL.revokeObjectURL(currentImageValue);
+      }
+      
+      form.setValue("image", value); // Set the temporary URL for immediate preview
+      
+      // Convert blob URL back to File object to upload
+      try {
+        const response = await fetch(value);
+        const blob = await response.blob();
+        // You might need to infer the file name/type if not available in blob directly
+        const fileName = `temp-upload-${Date.now()}.jpeg`; // Or extract from response headers if possible
+        const fileType = blob.type || 'image/jpeg';
+        const file = new File([blob], fileName, { type: fileType });
+        
+        const uploadedUrl = await compressAndUploadToStorage(file);
+        form.setValue("image", uploadedUrl); // Update with the actual Supabase URL
+        URL.revokeObjectURL(value); // Revoke the temporary URL
+      } catch (error) {
+        console.error("Error converting blob to file or uploading:", error);
+        form.setValue("image", ""); // Clear on error
+      }
+    } else {
+      // It's a direct URL (from existing data or a re-set)
+      form.setValue("image", value);
     }
   };
 
-  // Save banner mutation
-  const saveMutation = useMutation({
-    mutationFn: async (data: BannerHighlightFormValues) => {
-      const cleanData = {
-        ...data,
-        image: data.image || "",
-      };
-
-      console.log("Submitting clean data:", cleanData);
-      console.log("Image URL:", cleanData.image);
-
-      if (isNewBanner) {
-        return apiRequest("POST", "/api/banner-highlights", cleanData);
-      } else {
-        return apiRequest("PUT", `/api/banner-highlights/${bannerId}`, cleanData);
-      }
-    },
-    onSuccess: () => {
-      toast({
-        title: isNewBanner ? "Banner created" : "Banner updated",
-        description: isNewBanner
-          ? "The banner highlight has been successfully created."
-          : "The banner highlight has been successfully updated.",
-      });
-      queryClient.invalidateQueries({ queryKey: ["/api/banner-highlights"] });
-      navigate("/banner-highlights");
-    },
-    onError: (error) => {
-      console.error("Failed to save banner:", error);
-      toast({
-        title: "Error",
-        description: `Failed to ${isNewBanner ? "create" : "update"} banner: ${error.message || "Please try again"}`,
-        variant: "destructive",
-      });
-    },
-  });
-
   const onSubmit = (data: z.infer<typeof bannerFormSchema>) => {
     console.log("Form data before submission:", data);
-    if (data.image && data.image.startsWith("data:")) {
+    if (isCompressing) {
       toast({
         title: "Error",
-        description: "Please wait for image upload to complete",
+        description: "Please wait for image upload to complete before saving.",
         variant: "destructive",
       });
       return;
@@ -310,6 +336,8 @@ export default function BannerHighlightEditPage() {
 
     saveMutation.mutate(data as BannerHighlightFormValues);
   };
+
+  const imageValue = form.watch("image");
 
   return (
     <DashLayout
@@ -435,25 +463,28 @@ export default function BannerHighlightEditPage() {
                         <FormItem>
                           <FormLabel>Banner Image</FormLabel>
                           <FormControl>
-                            <CustomFileInput
-                              label={isCompressing ? "Compressing..." : "Upload Banner Image"}
+                            <FileInput
+                              label="Upload Banner Image"
                               value={field.value}
-                              onChange={handleImageChange}
+                              onChange={(url) => {
+                                // If a file was selected, `handleImageChange` will handle the upload.
+                                // If the value is null (cleared), `handleImageChange` will also handle it.
+                                // If it's a URL (from initial load), no action needed here.
+                                if (url === null || url.startsWith("blob:")) {
+                                  handleImageChange(url);
+                                } else {
+                                  field.onChange(url); // Set the URL directly if it's not a new file
+                                }
+                              }}
                               accept="image/*"
                               disabled={isCompressing}
                               isCompressing={isCompressing}
                             />
                           </FormControl>
                           <FormDescription>
-                            Images will be compressed and uploaded to Supabase storage
+                            Images will be compressed and uploaded to Supabase storage. For best results, use high-resolution images.
                           </FormDescription>
                           <FormMessage />
-                          {isCompressing && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Compressing and uploading image...
-                            </div>
-                          )}
                         </FormItem>
                       )}
                     />
@@ -492,10 +523,10 @@ export default function BannerHighlightEditPage() {
                     <CardDescription>How the banner will look on the website</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9]">
-                      {previewImage ? (
+                    <div className="rounded-md overflow-hidden bg-gray-100 mb-4 aspect-[16/9] border">
+                      {imageValue ? ( // Use imageValue from form.watch
                         <img
-                          src={previewImage}
+                          src={imageValue}
                           alt="Banner Preview"
                           className="w-full h-full object-cover"
                         />
