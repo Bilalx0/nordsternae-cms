@@ -6,9 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { FileInput } from "@/components/ui/file-input";
-import { apiRequest, queryClient } from "@/lib/queryClient";
-import { ArrowLeft, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { NeighborhoodFormValues } from "@/types";
 import {
@@ -30,7 +28,10 @@ import {
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import imageCompression from "browser-image-compression";
+import { supabase } from "@/lib/supabase";
 
+// Zod schema for form validation
 const neighborhoodFormSchema = z.object({
   urlSlug: z.string().min(3, "URL slug must be at least 3 characters"),
   title: z.string().min(3, "Title must be at least 3 characters"),
@@ -73,12 +74,239 @@ const defaultValues: NeighborhoodFormValues = {
   showOnFooter: false,
 };
 
+// Image compression options
+const bannerCompressionOptions = {
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1920,
+  useWebWorker: true,
+  initialQuality: 0.8,
+};
+
+const neighborCompressionOptions = {
+  maxSizeMB: 0.5,
+  maxWidthOrHeight: 800,
+  useWebWorker: true,
+  initialQuality: 0.8,
+};
+
+// FileInput Component
+const FileInput = ({
+  label,
+  value,
+  onChange,
+  accept,
+  multiple = false,
+  maxFiles = 1,
+  disabled = false,
+  isCompressing = false,
+}: {
+  label: string;
+  value?: string | string[];
+  onChange: (value: string | string[] | null) => void;
+  accept?: string;
+  multiple?: boolean;
+  maxFiles?: number;
+  disabled?: boolean;
+  isCompressing?: boolean;
+}) => {
+  const [dragActive, setDragActive] = useState(false);
+  const { toast } = useToast();
+
+  const compressAndUpload = async (file: File): Promise<string> => {
+    try {
+      // Determine bucket and compression
+      const isImage = accept?.includes("image/*");
+      const bucket = isImage ? "neighborhood-images" : "neighborhoods-brochure";
+      let fileToUpload = file;
+
+      if (isImage) {
+        console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
+        const options = label.includes("Neighbor Image") ? neighborCompressionOptions : bannerCompressionOptions;
+        fileToUpload = await imageCompression(file, options);
+        console.log(`Compressed image size: ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`);
+
+        toast({
+          title: "Image Compressed",
+          description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(fileToUpload.size / 1024 / 1024).toFixed(2)}MB`,
+        });
+      }
+
+      // Generate unique filename
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+
+      // Upload to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, fileToUpload, {
+          contentType: fileToUpload.type,
+          upsert: false,
+        });
+
+      if (error) {
+        console.error("Supabase upload error:", error);
+        throw new Error(`Storage upload failed: ${error.message}`);
+      }
+
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(fileName);
+
+      const publicUrl = publicUrlData.publicUrl;
+      console.log(`Uploaded file URL:`, publicUrl);
+
+      toast({
+        title: "Upload Successful",
+        description: `${isImage ? "Image" : "File"} uploaded successfully`,
+      });
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Failed to process file:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload ${accept?.includes("image/*") ? "image" : "file"}: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const fileArray = Array.from(files);
+    const limitedFiles = fileArray.slice(0, maxFiles);
+
+    if (multiple) {
+      const urls: string[] = [];
+      for (const file of limitedFiles) {
+        try {
+          const url = await compressAndUpload(file);
+          urls.push(url);
+        } catch (error) {
+          console.error("Failed to upload file:", error);
+        }
+      }
+      onChange(urls);
+    } else {
+      try {
+        const url = await compressAndUpload(limitedFiles[0]);
+        onChange(url);
+      } catch (error) {
+        console.error("Failed to upload file:", error);
+      }
+    }
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (disabled || isCompressing) return;
+    handleFiles(e.dataTransfer.files);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFiles(e.target.files);
+  };
+
+  const handleClear = () => {
+    onChange(null);
+  };
+
+  const currentValue = Array.isArray(value) ? value : value ? [value] : [];
+
+  return (
+    <div className="space-y-4">
+      <div
+        className={`relative border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+          dragActive
+            ? "border-primary bg-primary/5"
+            : "border-muted-foreground/25 hover:border-muted-foreground/50"
+        } ${disabled || isCompressing ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={() => !disabled && !isCompressing && document.getElementById(`file-input-${label}`)?.click()}
+      >
+        <input
+          id={`file-input-${label}`}
+          type="file"
+          className="hidden"
+          accept={accept}
+          multiple={multiple}
+          onChange={handleChange}
+          disabled={disabled || isCompressing}
+        />
+        <div className="flex flex-col items-center gap-2">
+          {isCompressing ? (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Compressing and uploading...</p>
+            </>
+          ) : (
+            <>
+              <Upload className="h-8 w-8 text-muted-foreground" />
+              <p className="text-sm font-medium">{label}</p>
+              <p className="text-xs text-muted-foreground">
+                Drag and drop or click to browse
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+      {currentValue.length > 0 && (
+        <div className="space-y-2">
+          {currentValue.map((val, index) => (
+            <div key={index} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm truncate">
+                  {val.split("/").pop() || "Uploaded file"}
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClear}
+                disabled={disabled || isCompressing}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function NeighborhoodEditPage() {
   const [match, params] = useRoute("/neighborhoods/:id");
   const [_, navigate] = useLocation();
   const { toast } = useToast();
   const isNewNeighborhood = !match || params?.id === "new";
   const neighborhoodId = isNewNeighborhood ? null : parseInt(params?.id || "");
+  const [isCompressing, setIsCompressing] = useState({
+    bannerImage: false,
+    images: false,
+    neighbourImage: false,
+    brochure: false,
+  });
 
   // Fetch neighborhood data if editing
   const { data: neighborhoodData, isLoading: isLoadingNeighborhood } = useQuery({
@@ -125,7 +353,7 @@ export default function NeighborhoodEditPage() {
         brochure: neighborhoodData.brochure || "",
         showOnFooter: !!neighborhoodData.showOnFooter,
       };
-
+      console.log("Populating form with data:", formData);
       form.reset(formData);
     }
   }, [neighborhoodData, form, isNewNeighborhood]);
@@ -152,13 +380,72 @@ export default function NeighborhoodEditPage() {
     return () => subscription.unsubscribe();
   }, [form, isNewNeighborhood]);
 
+  // Handle file changes
+  const handleBannerImageChange = async (value: string | string[] | null) => {
+    if (!value) {
+      form.setValue("bannerImage", "");
+      return;
+    }
+    setIsCompressing((prev) => ({ ...prev, bannerImage: true }));
+    const url = Array.isArray(value) ? value[0] : value;
+    form.setValue("bannerImage", url);
+    setIsCompressing((prev) => ({ ...prev, bannerImage: false }));
+  };
+
+  const handleImagesChange = async (value: string | string[] | null) => {
+    if (!value) {
+      form.setValue("images", []);
+      return;
+    }
+    setIsCompressing((prev) => ({ ...prev, images: true }));
+    const urls = Array.isArray(value) ? value : [value];
+    form.setValue("images", urls);
+    setIsCompressing((prev) => ({ ...prev, images: false }));
+  };
+
+  const handleNeighbourImageChange = async (value: string | string[] | null) => {
+    if (!value) {
+      form.setValue("neighbourImage", "");
+      return;
+    }
+    setIsCompressing((prev) => ({ ...prev, neighbourImage: true }));
+    const url = Array.isArray(value) ? value[0] : value;
+    form.setValue("neighbourImage", url);
+    setIsCompressing((prev) => ({ ...prev, neighbourImage: false }));
+  };
+
+  const handleBrochureChange = async (value: string | string[] | null) => {
+    if (!value) {
+      form.setValue("brochure", "");
+      return;
+    }
+    setIsCompressing((prev) => ({ ...prev, brochure: true }));
+    const url = Array.isArray(value) ? value[0] : value;
+    form.setValue("brochure", url);
+    setIsCompressing((prev) => ({ ...prev, brochure: false }));
+  };
+
   // Save neighborhood mutation
   const saveMutation = useMutation({
     mutationFn: async (data: NeighborhoodFormValues) => {
+      const cleanData = {
+        ...data,
+        bannerImage: data.bannerImage || "",
+        images: data.images || [],
+        neighbourImage: data.neighbourImage || "",
+        brochure: data.brochure || "",
+      };
+
+      console.log("Submitting clean data:", cleanData);
+      console.log("Banner Image URL:", cleanData.bannerImage);
+      console.log("Images URLs:", cleanData.images);
+      console.log("Neighbour Image URL:", cleanData.neighbourImage);
+      console.log("Brochure URL:", cleanData.brochure);
+
       if (isNewNeighborhood) {
-        return apiRequest("POST", "/api/neighborhoods", data);
+        return apiRequest("POST", "/api/neighborhoods", cleanData);
       } else {
-        return apiRequest("PUT", `/api/neighborhoods/${neighborhoodId}`, data);
+        return apiRequest("PUT", `/api/neighborhoods/${neighborhoodId}`, cleanData);
       }
     },
     onSuccess: () => {
@@ -175,15 +462,53 @@ export default function NeighborhoodEditPage() {
       console.error("Failed to save neighborhood:", error);
       toast({
         title: "Error",
-        description: `Failed to ${isNewNeighborhood ? "create" : "update"} neighborhood. Please try again.`,
+        description: `Failed to ${isNewNeighborhood ? "create" : "update"} neighborhood: ${error.message || "Please try again"}`,
         variant: "destructive",
       });
     },
   });
 
   const onSubmit = (data: z.infer<typeof neighborhoodFormSchema>) => {
+    console.log("Form data before submission:", data);
+    if (data.bannerImage && data.bannerImage.startsWith("data:")) {
+      toast({
+        title: "Error",
+        description: "Please wait for banner image upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (data.images?.some((url) => url.startsWith("data:"))) {
+      toast({
+        title: "Error",
+        description: "Please wait for all neighborhood images to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (data.neighbourImage && data.neighbourImage.startsWith("data:")) {
+      toast({
+        title: "Error",
+        description: "Please wait for neighbor image upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (data.brochure && data.brochure.startsWith("data:")) {
+      toast({
+        title: "Error",
+        description: "Please wait for brochure upload to complete",
+        variant: "destructive",
+      });
+      return;
+    }
     saveMutation.mutate(data as NeighborhoodFormValues);
   };
+
+  const bannerImageValue = form.watch("bannerImage");
+  const imagesValue = form.watch("images") || [];
+  const neighbourImageValue = form.watch("neighbourImage");
+  const brochureValue = form.watch("brochure");
 
   return (
     <DashLayout
@@ -474,6 +799,15 @@ export default function NeighborhoodEditPage() {
                 <CardDescription>Upload images and documents for this neighborhood</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {bannerImageValue && (
+                  <div className="mb-4">
+                    <img
+                      src={bannerImageValue}
+                      alt="Banner Preview"
+                      className="w-full max-w-md h-auto object-cover rounded-md border"
+                    />
+                  </div>
+                )}
                 <FormField
                   control={form.control}
                   name="bannerImage"
@@ -484,16 +818,34 @@ export default function NeighborhoodEditPage() {
                         <FileInput
                           label="Upload Banner Image"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handleBannerImageChange}
                           accept="image/*"
+                          disabled={isCompressing.bannerImage}
+                          isCompressing={isCompressing.bannerImage}
                         />
                       </FormControl>
-                      <FormDescription>Image for the main banner</FormDescription>
+                      <FormDescription>
+                        Images will be compressed and uploaded to Supabase storage
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
+                {imagesValue.length > 0 && (
+                  <div className="mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {imagesValue.map((url, index) => (
+                        <img
+                          key={index}
+                          src={url}
+                          alt={`Neighborhood Image ${index + 1}`}
+                          className="w-full h-32 object-cover rounded-md border"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <FormField
                   control={form.control}
                   name="images"
@@ -504,18 +856,31 @@ export default function NeighborhoodEditPage() {
                         <FileInput
                           label="Upload Images"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handleImagesChange}
                           accept="image/*"
                           multiple={true}
                           maxFiles={10}
+                          disabled={isCompressing.images}
+                          isCompressing={isCompressing.images}
                         />
                       </FormControl>
-                      <FormDescription>Upload up to 10 images of the neighborhood</FormDescription>
+                      <FormDescription>
+                        Upload up to 10 images of the neighborhood, compressed and stored in Supabase
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
+                {neighbourImageValue && (
+                  <div className="mb-4">
+                    <img
+                      src={neighbourImageValue}
+                      alt="Neighbor Image Preview"
+                      className="w-full max-w-xs h-auto object-cover rounded-md border"
+                    />
+                  </div>
+                )}
                 <FormField
                   control={form.control}
                   name="neighbourImage"
@@ -526,16 +891,30 @@ export default function NeighborhoodEditPage() {
                         <FileInput
                           label="Upload Neighbor Image"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handleNeighbourImageChange}
                           accept="image/*"
+                          disabled={isCompressing.neighbourImage}
+                          isCompressing={isCompressing.neighbourImage}
                         />
                       </FormControl>
-                      <FormDescription>Image for the neighboring areas</FormDescription>
+                      <FormDescription>
+                        Image for the neighboring areas, compressed and stored in Supabase
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
+                {brochureValue && (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 p-3 bg-muted rounded-md">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm truncate">
+                        {brochureValue.split("/").pop() || "Uploaded brochure"}
+                      </span>
+                    </div>
+                  </div>
+                )}
                 <FormField
                   control={form.control}
                   name="brochure"
@@ -546,11 +925,13 @@ export default function NeighborhoodEditPage() {
                         <FileInput
                           label="Upload Brochure"
                           value={field.value}
-                          onChange={field.onChange}
+                          onChange={handleBrochureChange}
                           accept="application/pdf"
+                          disabled={isCompressing.brochure}
+                          isCompressing={isCompressing.brochure}
                         />
                       </FormControl>
-                      <FormDescription>PDF brochure for this neighborhood</FormDescription>
+                      <FormDescription>PDF brochure uploaded to Supabase storage</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -588,12 +969,13 @@ export default function NeighborhoodEditPage() {
                 variant="outline"
                 onClick={() => navigate("/neighborhoods")}
                 className="mr-2"
+                disabled={Object.values(isCompressing).some((v) => v)}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
-                disabled={saveMutation.isPending}
+                disabled={saveMutation.isPending || Object.values(isCompressing).some((v) => v)}
                 className="flex items-center gap-2"
               >
                 {saveMutation.isPending ? (
