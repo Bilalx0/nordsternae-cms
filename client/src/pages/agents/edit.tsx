@@ -370,12 +370,7 @@ export default function AgentEditPage() {
         ...data,
         headShot: data.headShot || "",
         photo: data.photo || "",
-        introduction: data.introduction
-          ? data.introduction
-              .replace(/\n/g, "\\n") // Replace line breaks with \n
-              .replace(/\t/g, "\\t") // Replace tabs with \t
-              .replace(/\s{2,}/g, (match) => "\\t".repeat(Math.floor(match.length / 2))) // Replace multiple spaces with \t
-          : "",
+        introduction: data.introduction || "", // Save introduction as-is
       };
 
       console.log("Submitting clean data:", cleanData);
@@ -696,7 +691,7 @@ export default function AgentEditPage() {
                         />
                       </FormControl>
                       <FormDescription>
-                        This text will be displayed on the agent's profile page. Line breaks and spaces will be preserved.
+                        This text will be displayed on the agent's profile page. Line breaks and spaces will be preserved exactly as entered.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
