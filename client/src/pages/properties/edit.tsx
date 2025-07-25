@@ -109,15 +109,18 @@ const defaultValues: PropertyFormValues = {
 };
 
 const amenitiesList = [
-  "Balcony", "BBQ area", "Built in wardrobes", "Central air conditioning",
+  "Balcony", "BBQ area", "Built in wardrobes", "Central A/C & Heating",
   "Covered parking", "Fully fitted kitchen", "Private Gym", "Private Jacuzzi",
   "Kitchen Appliances", "Maids Room", "Pets allowed", "Private Garden",
   "Private Pool", "Sauna", "Steam room", "Study", "Sea/Water view",
   "Security", "Maintenance", "Within a Compound", "Indoor swimming pool",
   "Golf view", "Terrace", "Concierge Service", "Spa", "Maid Service",
   "Walk-in Closet", "Heating", "Children's Play Area", "Lobby in Building",
-  "Children's Pool"
+  "Children's Pool", "View of Landmark", "Shared Pool", "Shared Spa",
+  "Shared Gym", "Vastu-compliant", "Conference Room", "Available Networked",
+  "Dining in building", "Pantry", "Mezzanine"
 ];
+
 
 // Image compression options
 const imageCompressionOptions = {

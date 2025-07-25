@@ -79,12 +79,14 @@ const defaultValues: ArticleFormValues = {
 const articleCategories = [
   "Market News",
   "Investment Tips",
+  "Real Estate Info",
   "Property Spotlight",
   "Lifestyle",
   "Developer Insights",
   "Market Trends",
   "Dubai Regulations",
   "Featured Properties",
+  "New Development"
 ];
 
 // Image compression options
