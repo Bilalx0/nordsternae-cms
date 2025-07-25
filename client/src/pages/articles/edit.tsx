@@ -129,7 +129,6 @@ const FileInput = ({
     try {
       console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
 
-      // Compress the image
       const options = label.includes("Tile Image") ? tileCompressionOptions : inlineCompressionOptions;
       const compressedFile = await imageCompression(file, options);
       console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
@@ -139,12 +138,10 @@ const FileInput = ({
         description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
       });
 
-      // Generate unique filename
       const fileExt = file.name.split(".").pop();
       const bucket = "article-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
-      // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(fileName, compressedFile, {
@@ -157,7 +154,6 @@ const FileInput = ({
         throw new Error(`Storage upload failed: ${error.message}`);
       }
 
-      // Get public URL
       const { data: publicUrlData } = supabase.storage
         .from(bucket)
         .getPublicUrl(fileName);
@@ -284,7 +280,7 @@ const FileInput = ({
               <div className="flex items-center gap-2">
                 <ImageIcon className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm truncate">
-                  {val.split("/").pop() || "Uploaded image"}
+                  {typeof val === "string" ? val.split("/").pop() || "Uploaded image" : "Invalid image URL"}
                 </span>
               </div>
               <Button
