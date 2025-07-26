@@ -86,7 +86,11 @@ const articleCategories = [
   "Market Trends",
   "Dubai Regulations",
   "Featured Properties",
-  "New Development"
+  "New Development",
+  "Desgin", 
+  "Entertainment",
+"Community guide",
+"Architecture",
 ];
 
 // Image compression options
