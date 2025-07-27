@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button.jsx";
 import { Input } from "@/components/ui/input.jsx";
 import { Textarea } from "@/components/ui/textarea.jsx";
 import { Switch } from "@/components/ui/switch.jsx";
-import { FileInput } from "@/components/ui/file-input.jsx";
 import { apiRequest, queryClient } from "@/lib/queryClient.js";
 import { ArrowLeft, Save, Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast.js";
@@ -106,7 +105,6 @@ const FileInput = ({
   onChange,
   accept,
   multiple = false,
-  maxFiles = 1,
   disabled = false,
   isCompressing = false,
 }: {
@@ -115,7 +113,6 @@ const FileInput = ({
   onChange: (value: string | string[] | null) => void;
   accept?: string;
   multiple?: boolean;
-  maxFiles?: number;
   disabled?: boolean;
   isCompressing?: boolean;
 }) => {
@@ -174,31 +171,35 @@ const FileInput = ({
   };
 
   const handleFiles = async (files: FileList | null) => {
-  if (!files || files.length === 0) return;
+    if (!files || files.length === 0) return;
 
-  const fileArray = Array.from(files);
-  const filesToProcess = maxFiles ? fileArray.slice(0, maxFiles) : fileArray; // Use all files if maxFiles is undefined
+    const fileArray = Array.from(files);
 
-  if (multiple) {
-    const urls: string[] = [];
-    for (const file of filesToProcess) {
+    if (multiple) {
+      const urls: string[] = [];
+      for (const file of fileArray) {
+        try {
+          const url = await compressAndUpload(file);
+          urls.push(url);
+        } catch (error) {
+          console.error("Failed to upload file:", error);
+        }
+      }
+      if (urls.length > 0) {
+        onChange(urls);
+      } else {
+        onChange(null);
+      }
+    } else {
       try {
-        const url = await compressAndUpload(file);
-        urls.push(url);
+        const url = await compressAndUpload(fileArray[0]);
+        onChange(url);
       } catch (error) {
         console.error("Failed to upload file:", error);
+        onChange(null);
       }
     }
-    onChange(urls);
-  } else {
-    try {
-      const url = await compressAndUpload(filesToProcess[0]);
-      onChange(url);
-    } catch (error) {
-      console.error("Failed to upload file:", error);
-    }
-  }
-};
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -222,8 +223,10 @@ const FileInput = ({
     handleFiles(e.target.files);
   };
 
-  const handleClear = () => {
-    onChange(null);
+  const handleClear = (index: number) => {
+    const currentValue = Array.isArray(value) ? value : value ? [value] : [];
+    const updatedValue = currentValue.filter((_, i) => i !== index);
+    onChange(updatedValue.length > 0 ? updatedValue : null);
   };
 
   const currentValue = Array.isArray(value) ? value : value ? [value] : [];
@@ -282,7 +285,7 @@ const FileInput = ({
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={handleClear}
+                onClick={() => handleClear(index)}
                 disabled={disabled || isCompressing}
               >
                 <X className="h-4 w-4" />
@@ -463,28 +466,43 @@ export default function DevelopmentEditPage() {
       setImagesPreview([]);
       return;
     }
+
     setIsCompressing(true);
-    const urls = Array.isArray(value) ? value : [value];
+    const currentImages = form.getValues("images") || [];
+    const files = Array.isArray(value) ? value : [value];
+
     const newUrls: string[] = [];
-    for (const val of urls) {
+    for (const file of files) {
       try {
-        const url = await compressAndUpload(val);
+        const url = await compressAndUpload(file);
         newUrls.push(url);
       } catch (error) {
         console.error("Failed to upload image:", error);
       }
     }
-    form.setValue("images", newUrls);
-    setImagesPreview(newUrls);
+
+    const updatedImages = [...currentImages, ...newUrls];
+    form.setValue("images", updatedImages);
+    setImagesPreview(updatedImages);
     setIsCompressing(false);
+
+    if (newUrls.length === 0) {
+      toast({
+        title: "Upload Failed",
+        description: "No images were uploaded successfully.",
+        variant: "destructive",
+      });
+    } else if (newUrls.length < files.length) {
+      toast({
+        title: "Partial Upload",
+        description: `${newUrls.length} out of ${files.length} images uploaded successfully.`,
+        variant: "default",
+      });
+    }
   };
 
   // Compress and upload a single image
-  const compressAndUpload = async (fileUrl: string): Promise<string> => {
-    const response = await fetch(fileUrl);
-    const blob = await response.blob();
-    const file = new File([blob], "image.jpg", { type: blob.type });
-
+  const compressAndUpload = async (file: File): Promise<string> => {
     try {
       console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       const compressedFile = await imageCompression(file, imageCompressionOptions);
@@ -950,6 +968,7 @@ export default function DevelopmentEditPage() {
                             type="button"
                             className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => handleRemoveImage(index)}
+                            disabled={isCompressing}
                           >
                             <X className="h-4 w-4" />
                           </button>
@@ -975,7 +994,7 @@ export default function DevelopmentEditPage() {
                           isCompressing={isCompressing}
                         />
                       </FormControl>
-                      <FormDescription>Upload up to 10 images of the development, compressed and uploaded to Supabase</FormDescription>
+                      <FormDescription>Upload images of the development, compressed and uploaded to Supabase</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
