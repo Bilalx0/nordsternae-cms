@@ -106,7 +106,6 @@ const FileInput = ({
   onChange,
   accept,
   multiple = false,
-  maxFiles = 1,
   disabled = false,
   isCompressing = false,
 }: {
@@ -115,7 +114,6 @@ const FileInput = ({
   onChange: (value: string | string[] | null) => void;
   accept?: string;
   multiple?: boolean;
-  maxFiles?: number;
   disabled?: boolean;
   isCompressing?: boolean;
 }) => {
@@ -177,11 +175,11 @@ const FileInput = ({
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
-    const limitedFiles = fileArray.slice(0, maxFiles);
+    // Removed maxFiles limitation - now processes all selected files
 
     if (multiple) {
       const urls: string[] = [];
-      for (const file of limitedFiles) {
+      for (const file of fileArray) {
         try {
           const url = await compressAndUpload(file);
           urls.push(url);
@@ -192,7 +190,7 @@ const FileInput = ({
       onChange(urls);
     } else {
       try {
-        const url = await compressAndUpload(limitedFiles[0]);
+        const url = await compressAndUpload(fileArray[0]);
         onChange(url);
       } catch (error) {
         console.error("Failed to upload file:", error);
@@ -971,12 +969,11 @@ export default function DevelopmentEditPage() {
                           onChange={handleImagesChange}
                           accept="image/*"
                           multiple={true}
-                          maxFiles={10}
                           disabled={isCompressing}
                           isCompressing={isCompressing}
                         />
                       </FormControl>
-                      <FormDescription>Upload up to 10 images of the development, compressed and uploaded to Supabase</FormDescription>
+                      <FormDescription>Upload unlimited images of the development, compressed and uploaded to Supabase</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
