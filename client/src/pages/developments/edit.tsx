@@ -122,15 +122,7 @@ const FileInput = ({
 
   const compressAndUpload = async (file: File): Promise<string> => {
     try {
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       const compressedFile = await imageCompression(file, imageCompressionOptions);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
       const fileExt = file.name.split(".").pop();
       const bucket = "development-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -143,7 +135,6 @@ const FileInput = ({
         });
 
       if (error) {
-        console.error("Supabase upload error:", error);
         throw new Error(`Storage upload failed: ${error.message}`);
       }
 
@@ -151,22 +142,9 @@ const FileInput = ({
         .from(bucket)
         .getPublicUrl(fileName);
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: "Image uploaded successfully",
-      });
-
-      return publicUrl;
+      return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Failed to process image:", error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
       throw error;
     }
   };
@@ -175,26 +153,26 @@ const FileInput = ({
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
-    // Removed maxFiles limitation - now processes all selected files
+    const tempUrls = fileArray.map((file) => URL.createObjectURL(file));
+    onChange(tempUrls); // Immediately show previews
 
-    if (multiple) {
-      const urls: string[] = [];
-      for (const file of fileArray) {
-        try {
-          const url = await compressAndUpload(file);
-          urls.push(url);
-        } catch (error) {
-          console.error("Failed to upload file:", error);
-        }
-      }
-      onChange(urls);
-    } else {
-      try {
-        const url = await compressAndUpload(fileArray[0]);
-        onChange(url);
-      } catch (error) {
-        console.error("Failed to upload file:", error);
-      }
+    try {
+      const uploadPromises = fileArray.map((file) => compressAndUpload(file));
+      const uploadedUrls = await Promise.all(uploadPromises);
+
+      onChange(uploadedUrls); // Update with actual URLs after upload
+      toast({
+        title: "Upload Successful",
+        description: `${uploadedUrls.length} image${uploadedUrls.length > 1 ? "s" : ""} uploaded successfully`,
+      });
+    } catch (error) {
+      console.error("Failed to upload images:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      onChange(null); // Clear previews on error
     }
   };
 
@@ -443,7 +421,7 @@ export default function DevelopmentEditPage() {
   });
 
   const onSubmit = (data: z.infer<typeof developmentFormSchema>) => {
-    if (data.images?.some((url) => url.startsWith("data:"))) {
+    if (data.images?.some((url) => url.startsWith("blob:"))) {
       toast({
         title: "Error",
         description: "Please wait for all images to upload",
@@ -463,36 +441,45 @@ export default function DevelopmentEditPage() {
     }
     setIsCompressing(true);
     const urls = Array.isArray(value) ? value : [value];
-    const newUrls: string[] = [];
-    for (const val of urls) {
-      try {
-        const url = await compressAndUpload(val);
-        newUrls.push(url);
-      } catch (error) {
-        console.error("Failed to upload image:", error);
-      }
+    setImagesPreview(urls); // Update preview immediately
+    form.setValue("images", urls);
+
+    try {
+      const uploadPromises = urls.map(async (url) => {
+        if (url.startsWith("blob:")) {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const file = new File([blob], `image-${Date.now()}.jpg`, { type: blob.type });
+          return compressAndUpload(file);
+        }
+        return url;
+      });
+
+      const uploadedUrls = await Promise.all(uploadPromises);
+      form.setValue("images", uploadedUrls);
+      setImagesPreview(uploadedUrls);
+      toast({
+        title: "Upload Successful",
+        description: `${uploadedUrls.length} image${uploadedUrls.length > 1 ? "s" : ""} uploaded successfully`,
+      });
+    } catch (error) {
+      console.error("Failed to upload images:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      form.setValue("images", []);
+      setImagesPreview([]);
+    } finally {
+      setIsCompressing(false);
     }
-    form.setValue("images", newUrls);
-    setImagesPreview(newUrls);
-    setIsCompressing(false);
   };
 
   // Compress and upload a single image
-  const compressAndUpload = async (fileUrl: string): Promise<string> => {
-    const response = await fetch(fileUrl);
-    const blob = await response.blob();
-    const file = new File([blob], "image.jpg", { type: blob.type });
-
+  const compressAndUpload = async (file: File): Promise<string> => {
     try {
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       const compressedFile = await imageCompression(file, imageCompressionOptions);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
       const fileExt = file.name.split(".").pop();
       const bucket = "development-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -505,7 +492,6 @@ export default function DevelopmentEditPage() {
         });
 
       if (error) {
-        console.error("Supabase upload error:", error);
         throw new Error(`Storage upload failed: ${error.message}`);
       }
 
@@ -513,22 +499,9 @@ export default function DevelopmentEditPage() {
         .from(bucket)
         .getPublicUrl(fileName);
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: "Image uploaded successfully",
-      });
-
-      return publicUrl;
+      return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Failed to process image:", error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
       throw error;
     }
   };

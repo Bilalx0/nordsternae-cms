@@ -121,7 +121,6 @@ const amenitiesList = [
   "Dining in building", "Pantry", "Mezzanine"
 ];
 
-
 // Image compression options
 const imageCompressionOptions = {
   maxSizeMB: 1,
@@ -137,7 +136,6 @@ const FileInput = ({
   onChange,
   accept,
   multiple = false,
-  maxFiles = 1,
   disabled = false,
   isCompressing = false,
 }: {
@@ -146,7 +144,6 @@ const FileInput = ({
   onChange: (value: string | string[] | null) => void;
   accept?: string;
   multiple?: boolean;
-  maxFiles?: number;
   disabled?: boolean;
   isCompressing?: boolean;
 }) => {
@@ -155,23 +152,11 @@ const FileInput = ({
 
   const compressAndUpload = async (file: File): Promise<string> => {
     try {
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
-      // Compress the image
       const compressedFile = await imageCompression(file, imageCompressionOptions);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
-      // Generate unique filename
       const fileExt = file.name.split(".").pop();
       const bucket = "property-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
 
-      // Upload to Supabase Storage
       const { data, error } = await supabase.storage
         .from(bucket)
         .upload(fileName, compressedFile, {
@@ -180,31 +165,16 @@ const FileInput = ({
         });
 
       if (error) {
-        console.error("Supabase upload error:", error);
         throw new Error(`Storage upload failed: ${error.message}`);
       }
 
-      // Get public URL
       const { data: publicUrlData } = supabase.storage
         .from(bucket)
         .getPublicUrl(fileName);
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: "Image uploaded successfully",
-      });
-
-      return publicUrl;
+      return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Failed to process image:", error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
       throw error;
     }
   };
@@ -213,26 +183,26 @@ const FileInput = ({
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
-    const limitedFiles = fileArray.slice(0, maxFiles);
+    const tempUrls = fileArray.map((file) => URL.createObjectURL(file));
+    onChange(tempUrls); // Immediately show previews
 
-    if (multiple) {
-      const urls: string[] = [];
-      for (const file of limitedFiles) {
-        try {
-          const url = await compressAndUpload(file);
-          urls.push(url);
-        } catch (error) {
-          console.error("Failed to upload file:", error);
-        }
-      }
-      onChange(urls);
-    } else {
-      try {
-        const url = await compressAndUpload(limitedFiles[0]);
-        onChange(url);
-      } catch (error) {
-        console.error("Failed to upload file:", error);
-      }
+    try {
+      const uploadPromises = fileArray.map((file) => compressAndUpload(file));
+      const uploadedUrls = await Promise.all(uploadPromises);
+
+      onChange(uploadedUrls); // Update with actual URLs after upload
+      toast({
+        title: "Upload Successful",
+        description: `${uploadedUrls.length} image${uploadedUrls.length > 1 ? "s" : ""} uploaded successfully`,
+      });
+    } catch (error) {
+      console.error("Failed to upload images:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      onChange(null); // Clear previews on error
     }
   };
 
@@ -372,9 +342,7 @@ export default function PropertyEditPage() {
     if (propertyData && !isNewProperty) {
       console.log("Populating form with property data:", propertyData);
       
-      // Create a clean form data object
       const formData: PropertyFormValues = {
-        // String fields with fallbacks
         reference: propertyData.reference || "",
         listingType: propertyData.listingType || "sale",
         propertyType: propertyData.propertyType || "villa",
@@ -391,27 +359,19 @@ export default function PropertyEditPage() {
         brochure: propertyData.brochure || "",
         development: propertyData.development || "",
         neighbourhood: propertyData.neighbourhood || "",
-
-        // Numeric fields with proper conversion
         price: typeof propertyData.price === 'string' ? parseFloat(propertyData.price) || 0 : (propertyData.price || 0),
         bedrooms: propertyData.bedrooms ? (typeof propertyData.bedrooms === 'string' ? parseInt(propertyData.bedrooms) : propertyData.bedrooms) : undefined,
         bathrooms: propertyData.bathrooms ? (typeof propertyData.bathrooms === 'string' ? parseInt(propertyData.bathrooms) : propertyData.bathrooms) : undefined,
         sqfeetArea: propertyData.sqfeetArea ? (typeof propertyData.sqfeetArea === 'string' ? parseInt(propertyData.sqfeetArea) : propertyData.sqfeetArea) : undefined,
         sqfeetBuiltup: propertyData.sqfeetBuiltup ? (typeof propertyData.sqfeetBuiltup === 'string' ? parseInt(propertyData.sqfeetBuiltup) : propertyData.sqfeetBuiltup) : undefined,
-
-        // Boolean fields with proper conversion
         isExclusive: !!propertyData.isExclusive,
         isFeatured: !!propertyData.isFeatured,
         isFitted: !!propertyData.isFitted,
         isFurnished: !!propertyData.isFurnished,
         isDisabled: !!propertyData.isDisabled,
         sold: !!propertyData.sold,
-
-        // Array fields
         images: Array.isArray(propertyData.images) ? propertyData.images : (propertyData.images ? [propertyData.images] : []),
         agent: Array.isArray(propertyData.agent) ? propertyData.agent : (propertyData.agent ? [propertyData.agent] : []),
-
-        // Handle amenities (convert array to comma-separated string if needed)
         amenities: Array.isArray(propertyData.amenities) 
           ? propertyData.amenities.join(',') 
           : (propertyData.amenities || ''),
@@ -420,7 +380,6 @@ export default function PropertyEditPage() {
       console.log("Processed form data:", formData);
       console.log("Agent field value:", formData.agent);
 
-      // Reset the form with the new data
       form.reset(formData);
       setImagesPreview(Array.isArray(propertyData.images) ? propertyData.images : propertyData.images ? [propertyData.images] : []);
     }
@@ -429,7 +388,6 @@ export default function PropertyEditPage() {
   // Save property mutation
   const saveMutation = useMutation({
     mutationFn: async (data: PropertyFormValues) => {
-      // Parse amenities selection from array of strings to comma-separated string
       if (Array.isArray(data.amenities)) {
         data.amenities = data.amenities.join(',');
       }
@@ -464,7 +422,7 @@ export default function PropertyEditPage() {
 
   const onSubmit = (data: z.infer<typeof propertyFormSchema>) => {
     console.log("Form submitted with data:", data);
-    if (data.images?.some((url) => url.startsWith("data:"))) {
+    if (data.images?.some((url) => url.startsWith("blob:"))) {
       toast({
         title: "Error",
         description: "Please wait for all images to upload",
@@ -504,36 +462,45 @@ export default function PropertyEditPage() {
     }
     setIsCompressing(true);
     const urls = Array.isArray(value) ? value : [value];
-    const newUrls: string[] = [];
-    for (const val of urls) {
-      try {
-        const url = await compressAndUpload(val);
-        newUrls.push(url);
-      } catch (error) {
-        console.error("Failed to upload image:", error);
-      }
+    setImagesPreview(urls); // Update preview immediately
+    form.setValue("images", urls);
+
+    try {
+      const uploadPromises = urls.map(async (url) => {
+        if (url.startsWith("blob:")) {
+          const response = await fetch(url);
+          const blob = await response.blob();
+          const file = new File([blob], `image-${Date.now()}.jpg`, { type: blob.type });
+          return compressAndUpload(file);
+        }
+        return url;
+      });
+
+      const uploadedUrls = await Promise.all(uploadPromises);
+      form.setValue("images", uploadedUrls);
+      setImagesPreview(uploadedUrls);
+      toast({
+        title: "Upload Successful",
+        description: `${uploadedUrls.length} image${uploadedUrls.length > 1 ? "s" : ""} uploaded successfully`,
+      });
+    } catch (error) {
+      console.error("Failed to upload images:", error);
+      toast({
+        title: "Upload Failed",
+        description: `Failed to upload images: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+      form.setValue("images", []);
+      setImagesPreview([]);
+    } finally {
+      setIsCompressing(false);
     }
-    form.setValue("images", newUrls);
-    setImagesPreview(newUrls);
-    setIsCompressing(false);
   };
 
   // Compress and upload a single image
-  const compressAndUpload = async (fileUrl: string): Promise<string> => {
-    const response = await fetch(fileUrl);
-    const blob = await response.blob();
-    const file = new File([blob], "image.jpg", { type: blob.type });
-
+  const compressAndUpload = async (file: File): Promise<string> => {
     try {
-      console.log(`Original image size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
       const compressedFile = await imageCompression(file, imageCompressionOptions);
-      console.log(`Compressed image size: ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`);
-
-      toast({
-        title: "Image Compressed",
-        description: `File size reduced from ${(file.size / 1024 / 1024).toFixed(2)}MB to ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-      });
-
       const fileExt = file.name.split(".").pop();
       const bucket = "property-images";
       const fileName = `${bucket}-${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
@@ -546,7 +513,6 @@ export default function PropertyEditPage() {
         });
 
       if (error) {
-        console.error("Supabase upload error:", error);
         throw new Error(`Storage upload failed: ${error.message}`);
       }
 
@@ -554,22 +520,9 @@ export default function PropertyEditPage() {
         .from(bucket)
         .getPublicUrl(fileName);
 
-      const publicUrl = publicUrlData.publicUrl;
-      console.log(`Uploaded image URL:`, publicUrl);
-
-      toast({
-        title: "Upload Successful",
-        description: "Image uploaded successfully",
-      });
-
-      return publicUrl;
+      return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Failed to process image:", error);
-      toast({
-        title: "Upload Failed",
-        description: `Failed to upload image: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
       throw error;
     }
   };
@@ -698,7 +651,7 @@ export default function PropertyEditPage() {
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="villa">Villa</SelectItem>
-                            <SelectItem value="apartment">Apartment</SelectItem>
+18                            <SelectItem value="apartment">Apartment</SelectItem>
                             <SelectItem value="penthouse">Penthouse</SelectItem>
                             <SelectItem value="townhouse">Townhouse</SelectItem>
                           </SelectContent>
@@ -1147,239 +1100,238 @@ export default function PropertyEditPage() {
                 
                 <FormField
                   control={form.control}
-                  name="lifestyle"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Lifestyle</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Luxury, Beach, Family..." 
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Comma-separated lifestyle tags
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="permit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Permit Number</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Permit reference..." 
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Media & Documents</CardTitle>
-                <CardDescription>
-                  Upload images and documents for this property
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {imagesPreview.length > 0 && (
-                  <div className="mb-4">
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {imagesPreview.map((url, index) => (
-                        <div key={index} className="relative group">
-                          <img
-                            src={url}
-                            alt={`Property Image ${index + 1}`}
-                            className="w-full h-32 object-cover rounded-md border"
-                          />
-                          <button
-                            type="button"
-                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleRemoveImage(index)}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <FormField
-                  control={form.control}
-                  name="images"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Property Images</FormLabel>
-                      <FormControl>
-                        <FileInput
-                          label="Upload Images"
-                          value={field.value}
-                          onChange={handleImagesChange}
-                          accept="image/*"
-                          multiple={true}
-                          maxFiles={10}
-                          disabled={isCompressing}
-                          isCompressing={isCompressing}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Upload up to 10 images of the property, compressed and uploaded to Supabase
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="brochure"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Brochure</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Brochure URL..." 
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Link to a PDF brochure for this property
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Agent Assignment</CardTitle>
-                <CardDescription>
-                  Assign an agent to this property
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="agent"
+                    name="lifestyle"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Assigned Agent</FormLabel>
-                        <Select 
-                          onValueChange={(value) => {
-                            if (value === "") {
-                              console.log("Agent cleared");
-                              field.onChange([]);
-                            } else {
-                              const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
-                              if (selectedAgent) {
-                                console.log("Agent selected:", selectedAgent);
-                                field.onChange([{ 
-                                  id: selectedAgent.id.toString(), 
-                                  name: selectedAgent.name 
-                                }]);
-                              }
-                            }
-                          }}
-                          value={field.value?.[0]?.id ?? "none"}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select an agent" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="no-agent">No Agent</SelectItem>
-                            {(agents as Array<{id: number; name: string}>).map((agent) => (
-                              <SelectItem key={agent.id} value={agent.id.toString()}>
-                                {agent.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <FormLabel>Lifestyle</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Luxury, Beach, Family..." 
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
                         <FormDescription>
-                          Select an agent to assign to this property
+                          Comma-separated lifestyle tags
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Visibility</CardTitle>
-                <CardDescription>
-                  Control the visibility of this property
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="isDisabled"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                      <div className="space-y-0.5">
-                        <FormLabel className="text-base">Hidden</FormLabel>
-                        <FormDescription>
-                          This property will not be visible on the website
-                        </FormDescription>
+                  
+                  <FormField
+                    control={form.control}
+                    name="permit"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Permit Number</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Permit reference..." 
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+  
+              <Card>
+                <CardHeader>
+                  <CardTitle>Media & Documents</CardTitle>
+                  <CardDescription>
+                    Upload images and documents for this property
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {imagesPreview.length > 0 && (
+                    <div className="mb-4">
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {imagesPreview.map((url, index) => (
+                          <div key={index} className="relative group">
+                            <img
+                              src={url}
+                              alt={`Property Image ${index + 1}`}
+                              className="w-full h-32 object-cover rounded-md border"
+                            />
+                            <button
+                              type="button"
+                              className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => handleRemoveImage(index)}
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
+                    </div>
                   )}
-                />
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setLocation("/properties")}
-                className="mr-2"
-                disabled={isCompressing}
-              >
-                Cancel
-              </Button>
-              <Button 
-                type="submit"
-                disabled={saveMutation.isPending || isCompressing}
-                className="flex items-center gap-2"
-              >
-                {saveMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                Save Property
-              </Button>
-            </div>
-          </form>
-        </Form>
-      )}
-    </DashLayout>
-  );
-}
+                  <FormField
+                    control={form.control}
+                    name="images"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Property Images</FormLabel>
+                        <FormControl>
+                          <FileInput
+                            label="Upload Images"
+                            value={field.value}
+                            onChange={handleImagesChange}
+                            accept="image/*"
+                            multiple={true}
+                            disabled={isCompressing}
+                            isCompressing={isCompressing}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Upload unlimited images of the property, compressed and uploaded to Supabase
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="brochure"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Brochure</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Brochure URL..." 
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Link to a PDF brochure for this property
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+  
+              <Card>
+                <CardHeader>
+                  <CardTitle>Agent Assignment</CardTitle>
+                  <CardDescription>
+                    Assign an agent to this property
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="agent"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Assigned Agent</FormLabel>
+                          <Select 
+                            onValueChange={(value) => {
+                              if (value === "no-agent") {
+                                console.log("Agent cleared");
+                                field.onChange([]);
+                              } else {
+                                const selectedAgent = (agents as Array<{id: number; name: string}>).find(a => a.id === parseInt(value));
+                                if (selectedAgent) {
+                                  console.log("Agent selected:", selectedAgent);
+                                  field.onChange([{ 
+                                    id: selectedAgent.id.toString(), 
+                                    name: selectedAgent.name 
+                                  }]);
+                                }
+                              }
+                            }}
+                            value={field.value?.[0]?.id ?? "no-agent"}
+                          >
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select an agent" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="no-agent">No Agent</SelectItem>
+                              {(agents as Array<{id: number; name: string}>).map((agent) => (
+                                <SelectItem key={agent.id} value={agent.id.toString()}>
+                                  {agent.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormDescription>
+                            Select an agent to assign to this property
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+  
+              <Card>
+                <CardHeader>
+                  <CardTitle>Visibility</CardTitle>
+                  <CardDescription>
+                    Control the visibility of this property
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FormField
+                    control={form.control}
+                    name="isDisabled"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-base">Hidden</FormLabel>
+                          <FormDescription>
+                            This property will not be visible on the website
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+  
+              <div className="flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLocation("/properties")}
+                  className="mr-2"
+                  disabled={isCompressing}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit"
+                  disabled={saveMutation.isPending || isCompressing}
+                  className="flex items-center gap-2"
+                >
+                  {saveMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save Property
+                </Button>
+              </div>
+            </form>
+          </Form>
+        )}
+      </DashLayout>
+    );
+  }
