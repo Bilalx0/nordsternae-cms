@@ -174,31 +174,31 @@ const FileInput = ({
   };
 
   const handleFiles = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  if (!files || files.length === 0) return;
 
-    const fileArray = Array.from(files);
-    const limitedFiles = fileArray.slice(0, maxFiles);
+  const fileArray = Array.from(files);
+  const filesToProcess = maxFiles ? fileArray.slice(0, maxFiles) : fileArray; // Use all files if maxFiles is undefined
 
-    if (multiple) {
-      const urls: string[] = [];
-      for (const file of limitedFiles) {
-        try {
-          const url = await compressAndUpload(file);
-          urls.push(url);
-        } catch (error) {
-          console.error("Failed to upload file:", error);
-        }
-      }
-      onChange(urls);
-    } else {
+  if (multiple) {
+    const urls: string[] = [];
+    for (const file of filesToProcess) {
       try {
-        const url = await compressAndUpload(limitedFiles[0]);
-        onChange(url);
+        const url = await compressAndUpload(file);
+        urls.push(url);
       } catch (error) {
         console.error("Failed to upload file:", error);
       }
     }
-  };
+    onChange(urls);
+  } else {
+    try {
+      const url = await compressAndUpload(filesToProcess[0]);
+      onChange(url);
+    } catch (error) {
+      console.error("Failed to upload file:", error);
+    }
+  }
+};
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
