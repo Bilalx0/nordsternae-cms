@@ -971,6 +971,7 @@ export default function DevelopmentEditPage() {
                           onChange={handleImagesChange}
                           accept="image/*"
                           multiple={true}
+                          maxFiles={10}
                           disabled={isCompressing}
                           isCompressing={isCompressing}
                         />

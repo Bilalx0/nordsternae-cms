@@ -1229,6 +1229,7 @@ export default function PropertyEditPage() {
                           onChange={handleImagesChange}
                           accept="image/*"
                           multiple={true}
+                          maxFiles={10}
                           disabled={isCompressing}
                           isCompressing={isCompressing}
                         />
