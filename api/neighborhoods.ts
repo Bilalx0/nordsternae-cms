@@ -44,27 +44,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ message: 'Invalid request' });
   }
 
-  // Extract id from URL
-  const urlParts = req.url.split('/').filter(part => part && part !== 'api' && part !== 'neighborhoods');
+  // Extract id from URL path (for /api/neighborhoods/:id)
+  const pathWithoutQuery = req.url.split('?')[0];
+  const urlParts = pathWithoutQuery.split('/').filter(part => part && part !== 'api' && part !== 'neighborhoods');
   const id = urlParts[0];
-  const hasId = !!id && typeof id === 'string';
-  const neighborhoodId = hasId ? parseInt(id) : null;
+  const hasIdInPath = !!id && typeof id === 'string';
+  const neighborhoodIdFromPath = hasIdInPath ? parseInt(id) : null;
 
-  if (hasId && neighborhoodId !== null && isNaN(neighborhoodId)) {
-    console.log('Invalid ID: not a number after parsing:', id);
-    return res.status(400).json({ message: 'Invalid ID' });
+  if (hasIdInPath && (neighborhoodIdFromPath === null || isNaN(neighborhoodIdFromPath))) {
+    console.log('Invalid ID in path: not a number after parsing:', id);
+    return res.status(400).json({ message: 'Invalid ID in path' });
   }
 
-  console.log('Parsed neighborhoodId:', neighborhoodId);
+  console.log('Parsed neighborhoodId from path:', neighborhoodIdFromPath);
 
   try {
-    // Base route: /api/neighborhoods
-    if (!hasId) {
+    // Base route: /api/neighborhoods (handles GET all, GET with slug, POST)
+    if (!hasIdInPath) {
       if (req.method === 'GET') {
-        console.log('Fetching all neighborhoods');
-        const neighborhoods = await storage.getNeighborhoods();
-        console.log('Retrieved neighborhoods count:', neighborhoods.length);
+        console.log('Fetching neighborhoods with query filters:', req.query);
+
+        // Handle 'slug' query parameter for fetching a single neighborhood
+        const { slug } = req.query;
+        if (slug && typeof slug === 'string' && slug.trim() !== '') {
+          console.log(`Fetching neighborhood by slug: ${slug}`);
+          const neighborhoods = await storage.getNeighborhoods();
+          const neighborhood = neighborhoods.find((n: { urlSlug: string }) => n.urlSlug === slug) || null;
+
+          if (!neighborhood) {
+            console.log(`No neighborhood found for slug: ${slug}`);
+            return res.status(404).json({ message: `Neighborhood not found for slug: ${slug}` });
+          }
+
+          // Ensure image fields have defaults
+          neighborhood.images = neighborhood.images || [{ downloadURL: '/fallback-image.jpg' }];
+          console.log(`Found neighborhood for slug: ${slug}`, neighborhood);
+          return res.status(200).json(neighborhood);
+        }
+
+        // Handle other query parameters (if any, for filtering)
+        let neighborhoods = await storage.getNeighborhoods();
+        for (const key in req.query) {
+          if (key === 'slug') continue;
+          const queryValue = req.query[key];
+          if (typeof queryValue === 'string') {
+            const lowerCaseQueryValue = queryValue.toLowerCase();
+            neighborhoods = neighborhoods.filter((neighborhood: Record<string, unknown>) => {
+              const neighborhoodValue = neighborhood[key];
+              if (typeof neighborhoodValue === 'string') {
+                return neighborhoodValue.toLowerCase().includes(lowerCaseQueryValue);
+              }
+              if (typeof neighborhoodValue === 'number' && !isNaN(parseFloat(queryValue))) {
+                return neighborhoodValue === parseFloat(queryValue);
+              }
+              if (Array.isArray(neighborhoodValue) && neighborhoodValue.every(item => typeof item === 'string')) {
+                return neighborhoodValue.some(item => item.toLowerCase().includes(lowerCaseQueryValue));
+              }
+              return false;
+            });
+          }
+        }
+
+        // Ensure image fields for all neighborhoods
+        neighborhoods.forEach((neighborhood: { images: any[] }) => {
+          neighborhood.images = neighborhood.images || [{ downloadURL: '/fallback-image.jpg' }];
+        });
+
+        console.log('Retrieved neighborhoods count after filtering:', neighborhoods.length);
         res.status(200).json(neighborhoods);
+
       } else if (req.method === 'POST') {
         const data = validateBody(insertNeighborhoodSchema, req, res);
         if (!data) return;
@@ -77,28 +125,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(405).json({ message: 'Method not allowed' });
       }
     }
-    // Dynamic route: /api/neighborhoods/:id
+    // Dynamic route: /api/neighborhoods/:id (GET, PUT, DELETE by ID)
     else {
       if (req.method === 'GET') {
-        console.log('Querying neighborhood with ID:', neighborhoodId);
-        const neighborhood = await storage.getNeighborhood(neighborhoodId);
+        console.log('Querying neighborhood with ID:', neighborhoodIdFromPath);
+        const neighborhood = await storage.getNeighborhood(neighborhoodIdFromPath);
         console.log('Retrieved neighborhood:', neighborhood);
         if (!neighborhood) {
           return res.status(404).json({ message: 'Neighborhood not found' });
         }
+        neighborhood.images = neighborhood.images || [{ downloadURL: '/fallback-image.jpg' }];
         res.status(200).json(neighborhood);
       } else if (req.method === 'PUT') {
         const data = validateBody(insertNeighborhoodSchema.partial(), req, res);
         if (!data) return;
-        console.log('Updating neighborhood with ID:', neighborhoodId);
-        const neighborhood = await storage.updateNeighborhood(neighborhoodId, data);
+        console.log('Updating neighborhood with ID:', neighborhoodIdFromPath);
+        const neighborhood = await storage.updateNeighborhood(neighborhoodIdFromPath, data);
         if (!neighborhood) {
           return res.status(404).json({ message: 'Neighborhood not found' });
         }
+        neighborhood.images = neighborhood.images || [{ downloadURL: '/fallback-image.jpg' }];
         res.status(200).json(neighborhood);
       } else if (req.method === 'DELETE') {
-        console.log('Attempting to delete neighborhood with ID:', neighborhoodId);
-        const success = await storage.deleteNeighborhood(neighborhoodId);
+        console.log('Attempting to delete neighborhood with ID:', neighborhoodIdFromPath);
+        const success = await storage.deleteNeighborhood(neighborhoodIdFromPath);
         if (!success) {
           return res.status(404).json({ message: 'Neighborhood not found' });
         }
@@ -115,6 +165,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       message: error instanceof Error ? error.message : 'Unknown error',
       storageError,
       timestamp: new Date().toISOString(),
+      neighborhoodId: neighborhoodIdFromPath,
     });
   }
+  console.log('=== NEIGHBORHOODS API HANDLER END ===');
 }
