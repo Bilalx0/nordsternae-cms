@@ -36,6 +36,8 @@ import UploadProfileImage from "@/components/settings/UploadProfileImage";
 import DeleteAccount from "@/components/settings/DeleteAccount";
 import FooterLinkEditPage from "./pages/footer_links/edit.jsx";
 import FooterLinksPage from "./pages/footer_links/index.jsx";
+import ForgotPassword from "./components/auth/ForgotPassword.jsx";
+import ResetPassword from "./components/auth/ResetPassword.jsx";
 
 // ProtectedRoute component to guard authenticated routes
 function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>; [key: string]: any }) {
@@ -92,6 +94,8 @@ function Router() {
       <ProtectedRoute path="/footer_links" component={FooterLinksPage} />
       <ProtectedRoute path="/footer_links/new" component={FooterLinkEditPage} />
       <ProtectedRoute path="/footer_links/:id" component={FooterLinkEditPage} />
+      <ProtectedRoute path="/forgot-password" component={ForgotPassword} />
+      <ProtectedRoute path="/reset-password" component={ResetPassword} />
 
 
       {/* Fallback to 404 */}

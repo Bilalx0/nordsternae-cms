@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { AuthContext } from "@/context/AuthContext";
+import logo from './logo.svg'
 
 interface SidebarProps {
   className?: string;
@@ -153,7 +154,8 @@ function SidebarContent({ routes }) {
       <div className="flex items-center justify-center h-16 bg-primary">
         <Link href="/">
           <span className="text-white text-xl font-semibold cursor-pointer">
-            <img src="./logo.svg" alt="" className="w-44"/>
+            <img src={logo} alt="" className="w-44"/>
+
           </span>
         </Link>
       </div>

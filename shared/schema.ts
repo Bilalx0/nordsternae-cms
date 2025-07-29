@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, json, jsonb, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -26,7 +26,6 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-
 export const refreshTokens = pgTable("refresh_tokens", {
   id: serial("id").primaryKey(),
   token: text("token").notNull(),
@@ -43,7 +42,22 @@ export const insertRefreshTokenSchema = createInsertSchema(refreshTokens).omit({
 export type InsertRefreshToken = z.infer<typeof insertRefreshTokenSchema>;
 export type RefreshToken = typeof refreshTokens.$inferSelect;
 
-// Properties schema
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: varchar("id").primaryKey(),
+  token: varchar("token").notNull().unique(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+
 export const properties = pgTable("properties", {
   id: serial("id").primaryKey(),
   reference: text("reference").notNull(),
@@ -53,7 +67,7 @@ export const properties = pgTable("properties", {
   community: text("community").notNull(),
   region: text("region").notNull(),
   country: text("country").notNull(),
-  agent: jsonb("agent"), // JSON array of agent objects
+  agent: jsonb("agent"),
   price: integer("price").notNull(),
   currency: text("currency").notNull(),
   bedrooms: integer("bedrooms"),
@@ -65,14 +79,14 @@ export const properties = pgTable("properties", {
   sqfeetBuiltup: integer("sqfeet_builtup"),
   isExclusive: boolean("is_exclusive").default(false),
   amenities: text("amenities"),
-  isFeatured: boolean("is_featured").default(false),
+  isFeatured: boolean("is featured").default(false),
   isFitted: boolean("is_fitted").default(false),
   isFurnished: boolean("is_furnished").default(false),
   lifestyle: text("lifestyle"),
   permit: text("permit"),
   brochure: text("brochure"),
-  images: jsonb("images"), // JSON array of image URLs
-  isDisabled: boolean("is_disabled").default(false),
+  images: jsonb("images"),
+  isDisabled: boolean("is_disabled-tempered").default(false),
   development: text("development"),
   neighbourhood: text("neighbourhood"),
   sold: boolean("sold").default(false),
@@ -89,7 +103,6 @@ export const insertPropertySchema = createInsertSchema(properties).omit({
 export type InsertProperty = z.infer<typeof insertPropertySchema>;
 export type Property = typeof properties.$inferSelect;
 
-// Neighborhoods schema
 export const neighborhoods = pgTable("neighborhoods", {
   id: serial("id").primaryKey(),
   urlSlug: text("url_slug").notNull(),
@@ -101,7 +114,7 @@ export const neighborhoods = pgTable("neighborhoods", {
   locationAttributes: text("location_attributes"),
   address: text("address"),
   availableProperties: integer("available_properties"),
-  images: jsonb("images"), // JSON array of image URLs
+  images: jsonb("images"),
   neighbourImage: text("neighbour_image"),
   neighboursText: text("neighbours_text"),
   propertyOffers: text("property_offers"),
@@ -123,7 +136,6 @@ export const insertNeighborhoodSchema = createInsertSchema(neighborhoods).omit({
 export type InsertNeighborhood = z.infer<typeof insertNeighborhoodSchema>;
 export type Neighborhood = typeof neighborhoods.$inferSelect;
 
-// Developments schema
 export const developments = pgTable("developments", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -133,7 +145,7 @@ export const developments = pgTable("developments", {
   propertyDescription: text("property_description"),
   price: integer("price"),
   urlSlug: text("url_slug").notNull(),
-  images: jsonb("images"), // JSON array of image URLs
+  images: jsonb("images"),
   maxBedrooms: integer("max_bedrooms"),
   minBedrooms: integer("min_bedrooms"),
   floors: integer("floors"),
@@ -161,7 +173,6 @@ export const insertDevelopmentSchema = createInsertSchema(developments).omit({
 export type InsertDevelopment = z.infer<typeof insertDevelopmentSchema>;
 export type Development = typeof developments.$inferSelect;
 
-// Enquiries schema
 export const enquiries = pgTable("enquiries", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
@@ -183,7 +194,6 @@ export const insertEnquirySchema = createInsertSchema(enquiries).omit({
 export type InsertEnquiry = z.infer<typeof insertEnquirySchema>;
 export type Enquiry = typeof enquiries.$inferSelect;
 
-// Agents schema
 export const agents = pgTable("agents", {
   id: serial("id").primaryKey(),
   jobTitle: text("job_title"),
@@ -211,7 +221,6 @@ export const insertAgentSchema = createInsertSchema(agents).omit({
 export type InsertAgent = z.infer<typeof insertAgentSchema>;
 export type Agent = typeof agents.$inferSelect;
 
-// Articles schema
 export const articles = pgTable("articles", {
   id: serial("id").primaryKey(),
   author: text("author"),
@@ -223,7 +232,7 @@ export const articles = pgTable("articles", {
   readingTime: integer("reading_time"),
   externalId: text("external_id"),
   tileImage: text("tile_image"),
-  inlineImages: jsonb("inline_images"), // JSON array of image URLs
+  inlineImages: jsonb("inline_images"),
   bodyStart: text("body_start"),
   bodyEnd: text("body_end"),
   isDisabled: boolean("is_disabled").default(false),
@@ -242,7 +251,6 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
 export type Article = typeof articles.$inferSelect;
 
-// Banner Highlights schema
 export const bannerHighlights = pgTable("banner_highlights", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -265,7 +273,6 @@ export const insertBannerHighlightSchema = createInsertSchema(bannerHighlights).
 export type InsertBannerHighlight = z.infer<typeof insertBannerHighlightSchema>;
 export type BannerHighlight = typeof bannerHighlights.$inferSelect;
 
-// Developers schema
 export const developers = pgTable("developers", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -287,7 +294,6 @@ export const insertDeveloperSchema = createInsertSchema(developers).omit({
 export type InsertDeveloper = z.infer<typeof insertDeveloperSchema>;
 export type Developer = typeof developers.$inferSelect;
 
-// Sitemap schema
 export const sitemap = pgTable("sitemap", {
   id: serial("id").primaryKey(),
   completeUrl: text("complete_url").notNull(),

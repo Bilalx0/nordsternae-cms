@@ -124,6 +124,12 @@ export default function Login() {
                 Register
               </Link>
             </p>
+            <p className="text-sm text-center text-neutral-500">
+  Forgot your password?{" "}
+  <Link href="/forgot-password" className="text-primary">
+    Reset Password
+  </Link>
+</p>
           </form>
         </CardContent>
       </Card>
