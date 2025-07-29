@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useLocation, useLocationParams } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { toast } from "react-hot-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,8 +25,10 @@ const validatePassword = (password: string): { isValid: boolean; message?: strin
 
 export default function ResetPassword() {
   const [, setLocation] = useLocation();
-  const params = useLocationParams();
-  const token = params.token || "";
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const token = params.get("token") || "";
+  
   const [formData, setFormData] = useState({
     newPassword: "",
     confirmPassword: "",
