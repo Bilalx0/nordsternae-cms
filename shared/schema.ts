@@ -79,7 +79,7 @@ export const properties = pgTable("properties", {
   sqfeetBuiltup: integer("sqfeet_builtup"),
   isExclusive: boolean("is_exclusive").default(false),
   amenities: text("amenities"),
-  isFeatured: boolean("is featured").default(false),
+  isFeatured: boolean("is_featured").default(false),
   isFitted: boolean("is_fitted").default(false),
   isFurnished: boolean("is_furnished").default(false),
   lifestyle: text("lifestyle"),
