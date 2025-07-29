@@ -86,7 +86,7 @@ export const properties = pgTable("properties", {
   permit: text("permit"),
   brochure: text("brochure"),
   images: jsonb("images"),
-  isDisabled: boolean("is_disabled-tempered").default(false),
+  isDisabled: boolean("is_disabled").default(false),
   development: text("development"),
   neighbourhood: text("neighbourhood"),
   sold: boolean("sold").default(false),
