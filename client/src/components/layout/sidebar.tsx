@@ -44,8 +44,8 @@ export function Sidebar({ className }: SidebarProps) {
     {
       label: "Dashboard",
       icon: <LayoutDashboard className="h-5 w-5" />,
-      href: "/",
-      active: location === "/",
+      href: "/dashboard",
+      active: location === "/dashboard",
     },
     {
       label: "Properties",
