@@ -68,7 +68,7 @@ export default function Login() {
       toast.success("Login successful! Welcome back!");
       
       // Navigate to home page
-      setLocation("/");
+      setLocation("/dashboard");
       
     } catch (error: any) {
       setErrors((prev) => ({ ...prev, server: error.message || "Login failed" }));

@@ -4,7 +4,7 @@ import { queryClient } from "./lib/queryClient.js";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster.jsx";
 import { TooltipProvider } from "@/components/ui/tooltip.jsx";
-import { AuthProvider, AuthContext } from "@/context/AuthContext";
+import { AuthProvider, AuthContext } from "@/context/AuthContext.jsx";
 import { useContext, useEffect } from "react";
 import { useLocation } from "wouter";
 import NotFound from "@/pages/not-found.jsx";
@@ -53,15 +53,36 @@ function ProtectedRoute({ component: Component, ...rest }: { component: React.Co
   return user ? <Route {...rest} component={Component} /> : null;
 }
 
+// Component to handle root path redirection
+function RootRedirect() {
+  const [, navigate] = useLocation();
+  const { user } = useContext(AuthContext) as { user: any };
+
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    } else {
+      navigate("/login");
+    }
+  }, [user, navigate]);
+
+  return null; // This component doesn't render anything
+}
+
 function Router() {
   return (
     <Switch>
+      {/* Root path - redirects to dashboard if authenticated, login if not */}
+      <Route path="/" component={RootRedirect} />
+      
       {/* Public routes */}
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
 
       {/* Protected routes */}
-      <ProtectedRoute path="/" component={Dashboard} />
+      <ProtectedRoute path="/dashboard" component={Dashboard} />
       <ProtectedRoute path="/properties" component={PropertiesPage} />
       <ProtectedRoute path="/properties/new" component={PropertyEditPage} />
       <ProtectedRoute path="/properties/:id" component={PropertyEditPage} />
@@ -94,9 +115,6 @@ function Router() {
       <ProtectedRoute path="/footer_links" component={FooterLinksPage} />
       <ProtectedRoute path="/footer_links/new" component={FooterLinkEditPage} />
       <ProtectedRoute path="/footer_links/:id" component={FooterLinkEditPage} />
-      <ProtectedRoute path="/forgot-password" component={ForgotPassword} />
-      <ProtectedRoute path="/reset-password" component={ResetPassword} />
-
 
       {/* Fallback to 404 */}
       <Route component={NotFound} />

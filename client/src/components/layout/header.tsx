@@ -21,7 +21,8 @@ import { useLocation } from "wouter";
 // Real estate application searchable content - matching exact routes from App.tsx
 const searchableContent = [
   // Main pages
-  { id: 1, title: "Dashboard", type: "page", url: "/", icon: Home },
+  { id: 1, title: "Dashboard", type: "page", url: "/dashboard", icon: Home },
+
   { id: 2, title: "Properties", type: "page", url: "/properties", icon: Home },
   { id: 3, title: "Neighborhoods", type: "page", url: "/neighborhoods", icon: Hash },
   { id: 4, title: "Developments", type: "page", url: "/developments", icon: FileText },
