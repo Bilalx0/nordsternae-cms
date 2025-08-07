@@ -33,57 +33,8 @@
     { "src": "/assets/(.*)", "dest": "/client/dist/assets/$1" },
     { "src": "/favicon.ico", "dest": "/client/dist/favicon.ico" },
 
-    { "src": "/login", "dest": "/client/dist/index.html" },
-    { "src": "/register", "dest": "/client/dist/index.html" },
-    { "src": "/forgot-password", "dest": "/client/dist/index.html" },
-    { "src": "/reset-password", "dest": "/client/dist/index.html" },
-
-    { "src": "/dashboard", "dest": "/client/dist/index.html" },
-
-    { "src": "/properties", "dest": "/client/dist/index.html" },
-    { "src": "/properties/new", "dest": "/client/dist/index.html" },
-    { "src": "/properties/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/admin/import-properties", "dest": "/client/dist/index.html" },
-
-    { "src": "/agents", "dest": "/client/dist/index.html" },
-    { "src": "/agents/new", "dest": "/client/dist/index.html" },
-    { "src": "/agents/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/developments", "dest": "/client/dist/index.html" },
-    { "src": "/developments/new", "dest": "/client/dist/index.html" },
-    { "src": "/developments/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/neighborhoods", "dest": "/client/dist/index.html" },
-    { "src": "/neighborhoods/new", "dest": "/client/dist/index.html" },
-    { "src": "/neighborhoods/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/articles", "dest": "/client/dist/index.html" },
-    { "src": "/articles/new", "dest": "/client/dist/index.html" },
-    { "src": "/articles/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/enquiries", "dest": "/client/dist/index.html" },
-    { "src": "/enquiries/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/banner-highlights", "dest": "/client/dist/index.html" },
-    { "src": "/banner-highlights/new", "dest": "/client/dist/index.html" },
-    { "src": "/banner-highlights/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/developers", "dest": "/client/dist/index.html" },
-    { "src": "/developers/new", "dest": "/client/dist/index.html" },
-    { "src": "/developers/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/sitemap", "dest": "/client/dist/index.html" },
-    { "src": "/sitemap/new", "dest": "/client/dist/index.html" },
-    { "src": "/sitemap/[^/]+", "dest": "/client/dist/index.html" },
-
-    { "src": "/settings/change-password", "dest": "/client/dist/index.html" },
-    { "src": "/settings/delete-account", "dest": "/client/dist/index.html" },
-
-    { "src": "/footer_links", "dest": "/client/dist/index.html" },
-    { "src": "/footer_links/new", "dest": "/client/dist/index.html" },
-    { "src": "/footer_links/[^/]+", "dest": "/client/dist/index.html" },
-
     { "src": "/(.*)", "dest": "/client/dist/index.html" }
-  ]
+  ],
+  "cleanUrls": false,
+  "trailingSlash": false
 }
