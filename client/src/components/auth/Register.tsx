@@ -117,7 +117,7 @@ export default function Register() {
       toast.success("Registration successful! Welcome!");
       
       // Navigate to home page
-      setLocation("/dashboard");
+      setLocation("/");
       
     } catch (error: any) {
       toast.error(error.message);

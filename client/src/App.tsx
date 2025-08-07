@@ -61,7 +61,7 @@ function Router() {
       <Route path="/register" component={Register} />
 
       {/* Protected routes */}
-      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/" component={Dashboard} />
       <ProtectedRoute path="/properties" component={PropertiesPage} />
       <ProtectedRoute path="/properties/new" component={PropertyEditPage} />
       <ProtectedRoute path="/properties/:id" component={PropertyEditPage} />
