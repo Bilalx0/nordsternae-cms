@@ -15,6 +15,13 @@
       }
     }
   ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/dashboard",
+      "permanent": true
+    }
+  ],
   "routes": [
     { "src": "/api/properties(.*)", "dest": "/api/properties.ts" },
     { "src": "/api/sitemap(.*)", "dest": "/api/sitemap.ts" },
