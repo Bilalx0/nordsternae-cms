@@ -34,7 +34,5 @@
     { "src": "/favicon.ico", "dest": "/client/dist/favicon.ico" },
 
     { "src": "/(.*)", "dest": "/client/dist/index.html" }
-  ],
-  "cleanUrls": false,
-  "trailingSlash": false
+  ]
 }
