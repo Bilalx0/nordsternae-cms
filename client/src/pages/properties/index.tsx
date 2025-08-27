@@ -190,16 +190,7 @@ export default function PropertiesPage() {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
-  // Handle refresh
-  const handleRefresh = async (): Promise<void> => {
-    setIsRefreshing(true);
-    await refetch();
-    setIsRefreshing(false);
-    toast({
-      title: "Data refreshed",
-      description: "The properties list has been refreshed successfully.",
-    });
-  };
+ 
 
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
@@ -649,15 +640,6 @@ export default function PropertiesPage() {
           >
             <FileUp className="h-4 w-4" />
             Import CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handleRefresh}
-            className="flex items-center gap-2"
-            disabled={isRefreshing}
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? "Refreshing..." : "Refresh"}
           </Button>
           <Button
             variant="destructive"
