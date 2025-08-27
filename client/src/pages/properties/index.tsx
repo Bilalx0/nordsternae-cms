@@ -1,22 +1,22 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { DashLayout } from "@/components/layout/dash-layout";
-import { DataTable } from "@/components/ui/data-table";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { DashLayout } from "../../components/layout/dash-layout";
+import { DataTable } from "../../components/ui/data-table";
+import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
+import { apiRequest, queryClient } from "../../lib/queryClient";
 import { Plus, FileUp, FileDown, AlertCircle, Trash2, RefreshCw, Download, Clock, Eye, EyeOff, Star } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
-import { formatCurrency, objectsToCSV, downloadCSV } from "@/lib/utils";
-import { CSVUpload } from "@/components/ui/csv-upload";
+import { formatCurrency, objectsToCSV, downloadCSV } from "../../lib/utils";
+import { CSVUpload } from "../../components/ui/csv-upload";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription
-} from "@/components/ui/dialog";
+} from "../../components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +26,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle
-} from "@/components/ui/alert-dialog";
-import { useToast } from "@/hooks/use-toast";
+} from "../../components/ui/alert-dialog";
+import { useToast } from "../../hooks/use-toast";
 
 // Define types for better TypeScript support
 interface Property {
@@ -40,8 +40,8 @@ interface Property {
   price: number;
   currency: string;
   propertyStatus: string;
-  isDisabled: boolean; // Updated to use isDisabled for visibility
-  isFeatured: boolean; // Added isFeatured
+  isDisabled: boolean;
+  isFeatured: boolean;
   agent?: {
     id: string;
     name: string;
@@ -73,7 +73,6 @@ export default function PropertiesPage() {
   const [deletePropertyId, setDeletePropertyId] = useState<number | null>(null);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState<boolean>(false);
   const [showDeduplicateDialog, setShowDeduplicateDialog] = useState<boolean>(false);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isImporting, setIsImporting] = useState<boolean>(false);
   const [isDeduplicating, setIsDeduplicating] = useState<boolean>(false);
   const [lastImportTime, setLastImportTime] = useState<Date | null>(null);
@@ -86,6 +85,21 @@ export default function PropertiesPage() {
   const { data: rawProperties = [], isLoading, refetch } = useQuery<Property[]>({
     queryKey: ["/api/properties"],
   });
+
+  // Use useMemo to create a stable, deduplicated properties array.
+  // This is the key change to fix the pagination flickering.
+  // The array is only re-calculated when `rawProperties` changes.
+  const properties = useMemo(() => {
+    if (!Array.isArray(rawProperties)) {
+      return [];
+    }
+
+    return [...rawProperties]
+      .sort((a, b) => b.id - a.id)
+      .filter((property, index, self) => 
+        index === self.findIndex(p => p.reference === property.reference)
+      );
+  }, [rawProperties]);
 
   // Delete property mutation with enhanced feedback
   const deletePropertyMutation = useMutation<any, Error, number>({
@@ -190,12 +204,10 @@ export default function PropertiesPage() {
     return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
- 
-
   // Delete all properties mutation with enhanced feedback
   const deleteAllPropertiesMutation = useMutation<any[], Error>({
     mutationFn: async (): Promise<any[]> => {
-      const propertyIds = rawProperties.map(property => property.id);
+      const propertyIds = properties.map(property => property.id);
       const deletePromises = propertyIds.map(id => apiRequest("DELETE", `/api/properties/${id}`));
       const results = await Promise.allSettled(deletePromises);
       const failures = results.filter(result => result.status === 'rejected');
@@ -321,14 +333,7 @@ export default function PropertiesPage() {
 
   // Handle export CSV
   const handleExportCSV = (): void => {
-    // Deduplicate properties for export
-    const deduplicatedProperties = Array.isArray(rawProperties)
-      ? [...rawProperties]
-          .sort((a, b) => b.id - a.id)
-          .filter((property, index, self) => 
-            index === self.findIndex(p => p.reference === property.reference)
-          )
-      : [];
+    const deduplicatedProperties = properties; // Use the memoized array
 
     const selectedData = deduplicatedProperties.filter(property => selectedRowIds[property.id]);
 
@@ -514,15 +519,6 @@ export default function PropertiesPage() {
     },
   ];
 
-  // Deduplicate properties for display
-  const properties = Array.isArray(rawProperties)
-    ? [...rawProperties]
-        .sort((a, b) => b.id - a.id)
-        .filter((property, index, self) => 
-          index === self.findIndex(p => p.reference === property.reference)
-        )
-    : [];
-
   const filterableColumns = [
     {
       id: "propertyType",
@@ -539,7 +535,7 @@ export default function PropertiesPage() {
       title: "Status",
       options: [
         { label: "Off Plan", value: "Off Plan" },
-        { label: "Ready", value: " READY" },
+        { label: "Ready", value: "READY" },
         { label: "Sold", value: "Sold" }
       ]
     },
