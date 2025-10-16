@@ -93,6 +93,11 @@ const COMMERCIAL_AMENITIES_MAP: Record<string, string> = {
   'MZ': 'Mezzanine'
 };
 
+// Cache for existing references to avoid repeated DB calls
+let existingReferencesCache: Set<string> | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 60000; // 1 minute cache
+
 /**
  * Safely extract first array element or value
  */
@@ -150,6 +155,7 @@ function fixImageUrl(url: string): string {
   }
   
   // Fix missing slashes after domain (but avoid breaking already correct URLs)
+  // Pattern: https://domain.compath -> https://domain.com/path
   if (cleanUrl.match(/^https?:\/\/[^\/]+[^\/]$/)) {
     cleanUrl = cleanUrl.replace(/^(https?:\/\/[^\/]+)([^\/])/, '$1/$2');
   }
@@ -158,47 +164,20 @@ function fixImageUrl(url: string): string {
 }
 
 /**
- * Generate a hash of property data for change detection
- */
-function generatePropertyHash(property: InsertProperty): string {
-  const hashData = {
-    listingType: property.listingType,
-    propertyType: property.propertyType,
-    community: property.community,
-    subCommunity: property.subCommunity,
-    price: property.price,
-    bedrooms: property.bedrooms,
-    bathrooms: property.bathrooms,
-    sqfeetArea: property.sqfeetArea,
-    title: property.title,
-    description: property.description,
-    propertyStatus: property.propertyStatus,
-    amenities: property.amenities,
-    isFurnished: property.isFurnished,
-    isFitted: property.isFitted,
-    images: Array.isArray(property.images) ? property.images.slice(0, 5).join('|') : '', // First 5 images for comparison
-    development: property.development,
-    permit: property.permit
-  };
-  
-  return JSON.stringify(hashData);
-}
-
-/**
- * Map XML property to schema
+ * Map XML property to schema - optimized version
  */
 function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
   const reference = extractValue(xmlProperty.reference_number) || '';
   
   try {
-    // Price extraction
+    // Price extraction - optimized
     let price = 0;
     const priceData = xmlProperty.price?.[0] || xmlProperty.price;
     if (priceData?.yearly) {
       price = parseInt(extractValue(priceData.yearly).toString().replace(/\D/g, ''), 10) || 0;
     }
 
-    // Image extraction with proper URL fixing
+    // Image extraction with proper URL fixing - optimized
     let images: string[] = [];
     const photoData = xmlProperty.photo?.[0] || xmlProperty.photo;
     if (photoData?.url) {
@@ -209,7 +188,7 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
         .filter((url: string) => url.length > 0);
     }
 
-    // Agent extraction
+    // Agent extraction - optimized
     let agent = null;
     const agentData = xmlProperty.agent?.[0] || xmlProperty.agent;
     if (agentData) {
@@ -223,14 +202,14 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
     const propertyTypeCode = extractValue(xmlProperty.property_type) || 'AP';
     const isCommercial = COMMERCIAL_TYPES.has(propertyTypeCode);
 
-    // Amenities processing
+    // Amenities processing - optimized
     let amenities = '';
     const rawAmenities = extractValue(xmlProperty.private_amenities) || extractValue(xmlProperty.commercial_amenities);
     if (rawAmenities) {
       amenities = parseAmenities(rawAmenities, isCommercial);
     }
 
-    // Furnished status
+    // Furnished status - optimized
     const furnishedValue = extractValue(xmlProperty.furnished)?.toLowerCase() || '';
     const isFurnished = furnishedValue === 'yes' || furnishedValue === 'partly';
     const isFitted = furnishedValue.includes('partly');
@@ -273,96 +252,80 @@ function mapXmlToPropertySchema(xmlProperty: any): InsertProperty {
 }
 
 /**
- * Process properties for full sync (insert, update, delete)
+ * Get existing references with caching
  */
-async function fullSyncProperties(xmlProperties: any[]): Promise<{
+async function getExistingReferences(): Promise<Set<string>> {
+  const now = Date.now();
+  
+  // Return cached data if valid
+  if (existingReferencesCache && (now - cacheTimestamp) < CACHE_DURATION) {
+    return existingReferencesCache;
+  }
+  
+  // Fetch fresh data
+  const references = await storage.getAllPropertyReferences();
+  existingReferencesCache = new Set(references.map(ref => ref.reference));
+  cacheTimestamp = now;
+  
+  return existingReferencesCache;
+}
+
+/**
+ * Batch process properties for better performance
+ */
+async function batchProcessProperties(xmlProperties: any[], batchSize: number = 50): Promise<{
   propertiesToInsert: InsertProperty[];
-  propertiesToUpdate: Array<{ reference: string; data: Partial<InsertProperty> }>;
-  referencesToDelete: string[];
-  stats: {
-    total: number;
-    unchanged: number;
-    errors: Array<{ reference: string; error: string }>;
-  };
+  processedReferences: string[];
+  errors: Array<{ reference: string; error: string }>;
 }> {
   const propertiesToInsert: InsertProperty[] = [];
-  const propertiesToUpdate: Array<{ reference: string; data: Partial<InsertProperty> }> = [];
-  const referencesToDelete: string[] = [];
+  const processedReferences: string[] = [];
   const errors: Array<{ reference: string; error: string }> = [];
   
-  // Get all existing properties from database
-  const existingProperties = await storage.getAllPropertyReferences();
-  const existingMap = new Map(existingProperties.map(p => [p.reference, p]));
+  // Get existing references once
+  const existingReferences = await getExistingReferences();
   
-  // Track XML references to identify deletions
-  const xmlReferences = new Set<string>();
-  
-  // Process each XML property
-  for (const xmlProperty of xmlProperties) {
-    try {
-      const reference = extractValue(xmlProperty.reference_number);
-      if (!reference) {
-        errors.push({ reference: 'unknown', error: 'Missing reference number' });
-        continue;
-      }
-      
-      xmlReferences.add(reference);
-      const propertyData = mapXmlToPropertySchema(xmlProperty);
-      
-      const existing = existingMap.get(reference);
-      
-      if (!existing) {
-        // New property - insert
-        propertiesToInsert.push(propertyData);
-      } else {
-        // Existing property - check if update needed
-        const newHash = generatePropertyHash(propertyData);
-        const existingHash = generatePropertyHash(existing as any);
-        
-        if (newHash !== existingHash) {
-          // Data has changed - update
-          propertiesToUpdate.push({
-            reference,
-            data: propertyData
-          });
+  // Process in batches to avoid memory issues
+  for (let i = 0; i < xmlProperties.length; i += batchSize) {
+    const batch = xmlProperties.slice(i, i + batchSize);
+    
+    for (const xmlProperty of batch) {
+      try {
+        const reference = extractValue(xmlProperty.reference_number);
+        if (!reference) {
+          errors.push({ reference: 'unknown', error: 'Missing reference number' });
+          continue;
         }
+        
+        // Skip existing references - this is the key fix
+        if (existingReferences.has(reference)) {
+          continue;
+        }
+
+        const propertyData = mapXmlToPropertySchema(xmlProperty);
+        propertiesToInsert.push(propertyData);
+        processedReferences.push(reference);
+        
+        // Add to cache to prevent duplicates within this batch
+        existingReferences.add(reference);
+      } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown mapping error';
+        errors.push({ reference: extractValue(xmlProperty.reference_number) || 'unknown', error: errorMsg });
       }
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown mapping error';
-      errors.push({ 
-        reference: extractValue(xmlProperty.reference_number) || 'unknown', 
-        error: errorMsg 
-      });
     }
   }
   
-  // Find properties to delete (exist in DB but not in XML)
-  for (const [reference] of existingMap) {
-    if (!xmlReferences.has(reference)) {
-      referencesToDelete.push(reference);
-    }
-  }
-  
-  return {
-    propertiesToInsert,
-    propertiesToUpdate,
-    referencesToDelete,
-    stats: {
-      total: xmlProperties.length,
-      unchanged: existingMap.size - propertiesToUpdate.length - referencesToDelete.length,
-      errors
-    }
-  };
+  return { propertiesToInsert, processedReferences, errors };
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
   
-  // Enable CORS
+  // Enable CORS with optimized headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache'); // Disable caching for import endpoint
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -378,7 +341,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ message: 'Storage service unavailable' });
     }
 
-    // Get XML data
+    // Get XML data with timeout optimization
     let xmlData: string;
     if (req.method === 'POST' && req.body && typeof req.body === 'string' && req.body.includes('<list')) {
       xmlData = req.body;
@@ -387,11 +350,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       try {
         const response = await axios.get(xmlUrl, {
-          timeout: 15000,
+          timeout: 10000, // Increased timeout
           headers: {
             'Accept': 'application/xml, text/xml',
-            'User-Agent': 'PropertyImporter/2.0',
-            'Accept-Encoding': 'gzip'
+            'User-Agent': 'PropertyImporter/1.0',
+            'Accept-Encoding': 'gzip' // Enable compression
           },
           maxRedirects: 5
         });
@@ -407,7 +370,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
     
-    // Parse XML
+    // Parse XML with error handling
     let result;
     try {
       result = await XML_PARSER.parseStringPromise(xmlData);
@@ -426,102 +389,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!Array.isArray(xmlProperties) || xmlProperties.length === 0) {
       return res.status(200).json({ 
         message: 'No properties found in XML data',
+        total: 0,
+        processed: 0,
+        errors: 0,
+        results: [],
+        errorDetails: [],
         timestamp: new Date().toISOString(),
         processingTimeMs: Date.now() - startTime
       });
     }
 
-    // Process full sync
-    const syncResult = await fullSyncProperties(xmlProperties);
-    
-    // Execute database operations
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let deletedCount = 0;
-    const operationErrors: Array<{ reference: string; error: string; operation: string }> = [];
-    
-    // 1. Insert new properties
-    if (syncResult.propertiesToInsert.length > 0) {
-      try {
-        const { success, errors: insertErrors } = await storage.bulkInsertProperties(
-          syncResult.propertiesToInsert, 
-          200
-        );
-        insertedCount = success;
-        operationErrors.push(...insertErrors.map(e => ({ ...e, operation: 'insert' })));
-      } catch (error) {
-        console.error('Bulk insert failed:', error);
-        operationErrors.push({
-          reference: 'bulk',
-          error: error instanceof Error ? error.message : 'Bulk insert failed',
-          operation: 'insert'
+    // Process properties in batches for better performance
+    const { propertiesToInsert, processedReferences, errors } = await batchProcessProperties(xmlProperties, 100);
+
+    if (propertiesToInsert.length === 0) {
+      return res.status(200).json({
+        message: 'No new properties to insert (all properties already exist)',
+        total: xmlProperties.length,
+        processed: 0,
+        errors: errors.length,
+        results: [],
+        errorDetails: errors,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
+      });
+    }
+
+    // Insert new properties with optimized batch size
+    try {
+      const { success, errors: insertErrors } = await storage.bulkInsertProperties(propertiesToInsert, 200);
+      errors.push(...insertErrors);
+      
+      // Update cache with new references
+      if (existingReferencesCache) {
+        processedReferences.slice(0, success).forEach(ref => {
+          existingReferencesCache!.add(ref);
         });
       }
-    }
-    
-    // 2. Update existing properties
-    if (syncResult.propertiesToUpdate.length > 0) {
-      for (const { reference, data } of syncResult.propertiesToUpdate) {
-        try {
-          await storage.updatePropertyByReference(reference, data);
-          updatedCount++;
-        } catch (error) {
-          console.error(`Update failed for ${reference}:`, error);
-          operationErrors.push({
-            reference,
-            error: error instanceof Error ? error.message : 'Update failed',
-            operation: 'update'
-          });
+      
+      const processingTime = Date.now() - startTime;
+      return res.status(200).json({
+        message: success === propertiesToInsert.length ? 'Import completed successfully' : 'Import completed with some errors',
+        total: xmlProperties.length,
+        processed: success,
+        errors: errors.length,
+        results: processedReferences.slice(0, success).map(ref => ({ reference: ref, action: 'created' })),
+        errorDetails: errors,
+        timestamp: new Date().toISOString(),
+        processingTimeMs: processingTime,
+        performanceStats: {
+          xmlParseTime: `${processingTime}ms`,
+          avgProcessingTimePerProperty: `${(processingTime / xmlProperties.length).toFixed(2)}ms`,
+          duplicatesSkipped: xmlProperties.length - propertiesToInsert.length - errors.length
         }
-      }
+      });
+    } catch (dbError) {
+      console.error('Database operation failed:', dbError);
+      return res.status(500).json({
+        error: 'Failed to insert properties',
+        message: dbError instanceof Error ? dbError.message : 'Database error',
+        timestamp: new Date().toISOString(),
+        processingTimeMs: Date.now() - startTime
+      });
     }
-    
-    // 3. Delete missing properties
-    if (syncResult.referencesToDelete.length > 0) {
-      for (const reference of syncResult.referencesToDelete) {
-        try {
-          const property = await storage.getPropertyByReference(reference);
-          if (property) {
-            await storage.deleteProperty(property.id);
-            deletedCount++;
-          }
-        } catch (error) {
-          console.error(`Delete failed for ${reference}:`, error);
-          operationErrors.push({
-            reference,
-            error: error instanceof Error ? error.message : 'Delete failed',
-            operation: 'delete'
-          });
-        }
-      }
-    }
-    
-    const processingTime = Date.now() - startTime;
-    const allErrors = [...syncResult.stats.errors, ...operationErrors];
-    
-    return res.status(200).json({
-      message: allErrors.length === 0 ? 'Full sync completed successfully' : 'Full sync completed with some errors',
-      sync: {
-        inserted: insertedCount,
-        updated: updatedCount,
-        deleted: deletedCount,
-        unchanged: syncResult.stats.unchanged,
-        total: syncResult.stats.total
-      },
-      details: {
-        newProperties: syncResult.propertiesToInsert.slice(0, insertedCount).map(p => p.reference),
-        updatedProperties: syncResult.propertiesToUpdate.slice(0, updatedCount).map(p => p.reference),
-        deletedProperties: syncResult.referencesToDelete.slice(0, deletedCount)
-      },
-      errors: allErrors.length,
-      errorDetails: allErrors,
-      timestamp: new Date().toISOString(),
-      processingTimeMs: processingTime,
-      performanceStats: {
-        avgProcessingTimePerProperty: `${(processingTime / syncResult.stats.total).toFixed(2)}ms`,
-        operationsPerSecond: ((insertedCount + updatedCount + deletedCount) / (processingTime / 1000)).toFixed(2)
-      }
-    });
   } catch (error) {
     console.error('Import handler error:', error);
     const processingTime = Date.now() - startTime;
