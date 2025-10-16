@@ -133,25 +133,6 @@ export class DbStorage implements IStorage {
     return { success, errors };
   }
 
-  async bulkUpdateProperties(updates: { reference: string; data: Partial<schema.InsertProperty> }[]) {
-    for (const { reference, data } of updates) {
-      await db
-        .update(schema.properties)
-        .set({ ...data, updatedAt: new Date() })
-        .where(eq(schema.properties.reference, reference));
-    }
-    return { success: updates.length };
-  }
-
-  async deletePropertiesByReferences(references: string[]) {
-    if (!references.length) return { deleted: 0 };
-    const result = await db
-      .delete(schema.properties)
-      .where(sql`${schema.properties.reference} = ANY(${references})`);
-    return { deleted: result.count };
-  }
-  
-
   async upsertProperties(properties: Partial<schema.InsertProperty>[]): Promise<{
     success: number;
     errors: Array<{ reference: string; error: string }>;
