@@ -39,102 +39,99 @@ import FooterLinksPage from "./pages/footer_links/index.jsx";
 import ForgotPassword from "./components/auth/ForgotPassword.jsx";
 import ResetPassword from "./components/auth/ResetPassword.jsx";
 
-// // ProtectedRoute component to guard authenticated routes
-// function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>; [key: string]: any }) {
-//   const { user } = useContext(AuthContext) as { user: any };
-//   const [, navigate] = useLocation();
+// ProtectedRoute component to guard authenticated routes
+function ProtectedRoute({ component: Component, ...rest }: { component: React.ComponentType<any>; [key: string]: any }) {
+  const { user } = useContext(AuthContext) as { user: any };
+  const [, navigate] = useLocation();
 
-//   useEffect(() => {
-//     if (!user) {
-//       navigate("/login");
-//     }
-//   }, [user, navigate]);
+  useEffect(() => {
+    if (!user) {
+      navigate("/login");
+    }
+  }, [user, navigate]);
 
-//   return user ? <Route {...rest} component={Component} /> : null;
-// }
+  return user ? <Route {...rest} component={Component} /> : null;
+}
 
-// // Component to handle root path redirection
-// function RootRedirect() {
-//   const [, navigate] = useLocation();
-//   const { user } = useContext(AuthContext) as { user: any };
+// Component to handle root path redirection
+function RootRedirect() {
+  const [, navigate] = useLocation();
+  const { user } = useContext(AuthContext) as { user: any };
 
-//   useEffect(() => {
-//     if (user) {
-//       navigate("/dashboard");
-//     } else {
-//       navigate("/login");
-//     }
-//   }, [user, navigate]);
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    } else {
+      navigate("/login");
+    }
+  }, [user, navigate]);
 
-//   return null; // This component doesn't render anything
-// }
+  return null; // This component doesn't render anything
+}
 
-// function Router() {
-//   return (
-//     <Switch>
-//       {/* Root path - redirects to dashboard if authenticated, login if not */}
-//       <Route path="/" component={RootRedirect} />
+function Router() {
+  return (
+    <Switch>
+      {/* Root path - redirects to dashboard if authenticated, login if not */}
+      <Route path="/" component={RootRedirect} />
       
-//       {/* Public routes */}
-//       <Route path="/login" component={Login} />
-//       <Route path="/register" component={Register} />
-//       <Route path="/forgot-password" component={ForgotPassword} />
-//       <Route path="/reset-password" component={ResetPassword} />
+      {/* Public routes */}
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
 
-//       {/* Protected routes */}
-//       <ProtectedRoute path="/dashboard" component={Dashboard} />
-//       <ProtectedRoute path="/properties" component={PropertiesPage} />
-//       <ProtectedRoute path="/properties/new" component={PropertyEditPage} />
-//       <ProtectedRoute path="/properties/:id" component={PropertyEditPage} />
-//       <ProtectedRoute path="/admin/import-properties" component={ImportProperties} />
-//       <ProtectedRoute path="/agents" component={AgentsPage} />
-//       <ProtectedRoute path="/agents/new" component={AgentEditPage} />
-//       <ProtectedRoute path="/agents/:id" component={AgentEditPage} />
-//       <ProtectedRoute path="/developments" component={DevelopmentsPage} />
-//       <ProtectedRoute path="/developments/new" component={DevelopmentEditPage} />
-//       <ProtectedRoute path="/developments/:id" component={DevelopmentEditPage} />
-//       <ProtectedRoute path="/neighborhoods" component={NeighborhoodsPage} />
-//       <ProtectedRoute path="/neighborhoods/new" component={NeighborhoodEditPage} />
-//       <ProtectedRoute path="/neighborhoods/:id" component={NeighborhoodEditPage} />
-//       <ProtectedRoute path="/articles" component={ArticlesPage} />
-//       <ProtectedRoute path="/articles/new" component={ArticleEditPage} />
-//       <ProtectedRoute path="/articles/:id" component={ArticleEditPage} />
-//       <ProtectedRoute path="/enquiries" component={EnquiriesPage} />
-//       <ProtectedRoute path="/enquiries/:id" component={EnquiryDetailPage} />
-//       <ProtectedRoute path="/banner-highlights" component={BannerHighlightsPage} />
-//       <ProtectedRoute path="/banner-highlights/new" component={BannerHighlightEditPage} />
-//       <ProtectedRoute path="/banner-highlights/:id" component={BannerHighlightEditPage} />
-//       <ProtectedRoute path="/developers" component={DevelopersPage} />
-//       <ProtectedRoute path="/developers/new" component={DeveloperEditPage} />
-//       <ProtectedRoute path="/developers/:id" component={DeveloperEditPage} />
-//       <ProtectedRoute path="/sitemap" component={SitemapPage} />
-//       <ProtectedRoute path="/sitemap/new" component={SitemapEditPage} />
-//       <ProtectedRoute path="/sitemap/:id" component={SitemapEditPage} />
-//       <ProtectedRoute path="/settings/change-password" component={ChangePassword} />
-//       <ProtectedRoute path="/settings/delete-account" component={DeleteAccount} />
-//       <ProtectedRoute path="/footer_links" component={FooterLinksPage} />
-//       <ProtectedRoute path="/footer_links/new" component={FooterLinkEditPage} />
-//       <ProtectedRoute path="/footer_links/:id" component={FooterLinkEditPage} />
+      {/* Protected routes */}
+      <ProtectedRoute path="/dashboard" component={Dashboard} />
+      <ProtectedRoute path="/properties" component={PropertiesPage} />
+      <ProtectedRoute path="/properties/new" component={PropertyEditPage} />
+      <ProtectedRoute path="/properties/:id" component={PropertyEditPage} />
+      <ProtectedRoute path="/admin/import-properties" component={ImportProperties} />
+      <ProtectedRoute path="/agents" component={AgentsPage} />
+      <ProtectedRoute path="/agents/new" component={AgentEditPage} />
+      <ProtectedRoute path="/agents/:id" component={AgentEditPage} />
+      <ProtectedRoute path="/developments" component={DevelopmentsPage} />
+      <ProtectedRoute path="/developments/new" component={DevelopmentEditPage} />
+      <ProtectedRoute path="/developments/:id" component={DevelopmentEditPage} />
+      <ProtectedRoute path="/neighborhoods" component={NeighborhoodsPage} />
+      <ProtectedRoute path="/neighborhoods/new" component={NeighborhoodEditPage} />
+      <ProtectedRoute path="/neighborhoods/:id" component={NeighborhoodEditPage} />
+      <ProtectedRoute path="/articles" component={ArticlesPage} />
+      <ProtectedRoute path="/articles/new" component={ArticleEditPage} />
+      <ProtectedRoute path="/articles/:id" component={ArticleEditPage} />
+      <ProtectedRoute path="/enquiries" component={EnquiriesPage} />
+      <ProtectedRoute path="/enquiries/:id" component={EnquiryDetailPage} />
+      <ProtectedRoute path="/banner-highlights" component={BannerHighlightsPage} />
+      <ProtectedRoute path="/banner-highlights/new" component={BannerHighlightEditPage} />
+      <ProtectedRoute path="/banner-highlights/:id" component={BannerHighlightEditPage} />
+      <ProtectedRoute path="/developers" component={DevelopersPage} />
+      <ProtectedRoute path="/developers/new" component={DeveloperEditPage} />
+      <ProtectedRoute path="/developers/:id" component={DeveloperEditPage} />
+      <ProtectedRoute path="/sitemap" component={SitemapPage} />
+      <ProtectedRoute path="/sitemap/new" component={SitemapEditPage} />
+      <ProtectedRoute path="/sitemap/:id" component={SitemapEditPage} />
+      <ProtectedRoute path="/settings/change-password" component={ChangePassword} />
+      <ProtectedRoute path="/settings/delete-account" component={DeleteAccount} />
+      <ProtectedRoute path="/footer_links" component={FooterLinksPage} />
+      <ProtectedRoute path="/footer_links/new" component={FooterLinkEditPage} />
+      <ProtectedRoute path="/footer_links/:id" component={FooterLinkEditPage} />
 
-//       {/* Fallback to 404 */}
-//       <Route component={NotFound} />
-//     </Switch>
-//   );
-// }
+      {/* Fallback to 404 */}
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
 
 function App() {
   return (
-    // <QueryClientProvider client={queryClient}>
-    //   <AuthProvider>
-    //     <TooltipProvider>
-    //       <Toaster />
-    //       <Router />
-    //     </TooltipProvider>
-    //   </AuthProvider>
-    // </QueryClientProvider>
-    <div>
-    <p className="text-3xl font-bold text-gray-800">We are currently experiencing technical difficulties, Website is currently down</p>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 
